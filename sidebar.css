@@ -1,0 +1,113 @@
+:root {}
+body {
+	height: 100%;
+	background-color: #aaaaaa;
+	/*border-left:2pt solid black;*/
+}
+.tab:hover { background-color: #d0d0d0; }
+.tab {
+	width: 100%;
+	/*height: 22px;*/
+	table-layout: fixed;
+	border-collapse: collapse;
+	background-color: #e0e0e0;
+	border-top:1pt solid black;
+	/*border-left:1pt solid black;*/
+}
+.title {
+	white-space: nowrap;
+	overflow: hidden;
+	height: 1em;
+	vertical-align: top;
+}
+.expand {
+	width: 10px;
+}
+.favicon {
+	width: 22px;
+}
+.close {
+	position: absolute;
+	right: 0px;
+	width: 19px;
+}
+img {
+	height: 16px;
+	vertical-align: bottom;
+}
+.tab * {
+	margin: 0 0 0 0;
+	border: 0 0 0 0;
+	padding: 0 0 0 0;
+
+}
+
+
+#newTab img {
+	margin-left: auto;
+	margin-right: auto;
+	display: block;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*body {
+	height: 100%;
+	background-color: #aaaaaa;
+}
+
+.tab {
+	position: relative;
+	overflow: hidden;
+	white-space: nowrap;
+	padding-left: 3px;
+	padding-right: 80px;
+	background-color: #efefef;
+	border-bottom:1pt solid black;
+}
+.tab * {
+	position: absolute;
+}
+.title {
+	display: inline-block;
+	vertical-align: top;
+}
+.favicon {
+	height: 16px;
+	width: 16px;
+}
+.close {
+	position: absolute;
+	right: 0px;
+	float: right;
+}
+img {
+	vertical-align: middle;
+}*/
+
+
+
