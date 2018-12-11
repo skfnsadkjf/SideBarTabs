@@ -11,7 +11,10 @@
 		"default_panel": "sidebar.html"
 	},
 
-	"permissions": ["tabs"]
+	"permissions": [
+		"tabs",
+		"sessions"
+	]
 
 
 }
