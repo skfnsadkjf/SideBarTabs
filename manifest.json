@@ -11,10 +11,23 @@
 		"default_panel": "sidebar.html"
 	},
 
+	"background": {
+		"scripts": [
+			"background.js"
+		]
+	},
+
 	"permissions": [
 		"tabs",
-		"sessions"
-	]
+		"sessions",
+		"storage"
+	],
+
+	"applications": {
+		"gecko": {
+			"id": "{c0a99110-9fef-49e7-ab15-f2fb8c83f9d0}"
+		}
+	}
 
 
 }
