@@ -4,19 +4,47 @@ function getTabId( elem ){
 function closeTab( e ) {
 	browser.tabs.remove( getTabId( e.target ) );
 }
-function setMargin( elem , indent ) {
-	elem.style["margin-left"] = String( 10 * indent ) + "px";
-}
 function newTab( e ) {
 	if ( e.button == 0 ) browser.tabs.create( {} );
 }
 function dblclick( e ) {
 	port.postMessage( { "hideChildren" : { "id" : getTabId( e.target ) } } );
 }
+function getTab( elem ) {
+	if ( elem.tagName == "HTML" ) return undefined;
+	return elem.classList.contains( "tab" ) ? elem : getTab( elem.parentElement );
+}
+function getMoveTo( y ) {
+	let r = hover.getBoundingClientRect();
+	console.log( r.height )
+	// return Math.floor( ( y - r.top ) / ( r.height / 3 ) );
+	return Math.floor( ( y - r.top ) / ( 17 / 3 ) ); // sometimes r.height is 0, so I hardcoded it as 17
+}
+function moveTabs( y ) {
+	let from = getTabId( tabToMove );
+	let to = getTabId( hover );
+	let type = getMoveTo( y );
+	port.postMessage( { "move" : { "from" : from , "to" : to , "type" : type } } );
+}
+function drag( e ) {
+	if ( hover ) hover.classList.remove( "moveToTop" , "moveToCenter" , "moveToBottom" );
+	hover = getTab( e.target );
+	if ( hover ) hover.classList.add( moveTo[getMoveTo( e.pageY )] );
+}
+function mouseup( e ) {
+	document.removeEventListener( "mousemove" , drag );
+	if ( hover ) {
+		hover.classList.remove( "moveToTop" , "moveToCenter" , "moveToBottom" );
+		if ( hover != tabToMove ) moveTabs( e.pageY );
+	}
+}
 function clicked( e ) {
 	let tabId = getTabId( e.target );
 	if ( e.button == 0 ) {
+		tabToMove = hover = getTab( e.target );
 		browser.tabs.update( tabId , { "active" : true } );
+		document.addEventListener( "mousemove" , drag );
+		document.addEventListener( "mouseup" , mouseup );
 	}
 	if ( e.button == 1 ) {
 		closeTab( e );
@@ -24,8 +52,10 @@ function clicked( e ) {
 	}
 	// if ( e.button == 2 ) {} // do context menu stuff
 }
+function setMargin( elem , indent ) {
+	elem.style["margin-left"] = String( 10 * indent ) + "px";
+}
 function makeElem( tab , data ) {
-	// console.log( tab.successorTabId );
 	let elem = document.importNode( document.getElementById( "tabTemplate" ) , true ).content.firstChild;
 	elem.querySelector( ".title" ).innerText = tab.title;
 	elem.id = tab.id;
@@ -45,7 +75,8 @@ function makeElem( tab , data ) {
 
 
 
-let TABS_ELEM , port;
+const moveTo = ["moveToTop" , "moveToCenter" , "moveToBottom"];
+let TABS_ELEM , port , hover , tabToMove;
 window.onload = function() {
 	TABS_ELEM = document.getElementById( "tabList" );
 	document.getElementById( "newTab" ).addEventListener( "click" , newTab );
@@ -77,6 +108,16 @@ window.onload = function() {
 				document.getElementById( message.active.prevId ).classList.remove( "active" );
 			}
 		}
-		// if ( !document.hidden ) for ( var x in sorting ) doSort( sorting[x] , false );
-	});
+		if ( message.move ) {
+			let before = TABS_ELEM.children[message.move.moveTo];
+			if ( message.move.moveFrom.map( v => v.id ).includes ( parseInt( before.id ) ) ) {
+				before = TABS_ELEM.children[message.move.moveTo + message.move.moveFrom.length];
+			} // this prevents the edge case of calling insertBefore() with the same element as both arguments.
+			message.move.moveFrom.forEach( v => {
+				let elem = document.getElementById( v.id );
+				setMargin( elem , v.indent );
+				TABS_ELEM.insertBefore( elem , before );
+			} );
+		}
+	} );
 }

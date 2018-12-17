@@ -45,7 +45,8 @@ function hideChildren( index , hide ) {
 	hideChildrenRecursive( index , hide );
 	update( index );
 }
-function freeChildren( index , lastDescendant ) {
+function freeChildren( index ) {
+	let lastDescendant = getLastDescendant( index ); // this must be defined outside the for loop definition. trust me.
 	hideChildren( index , false ); // make sure all promoted children are visible
 	for ( let i = index + 1; i <= lastDescendant; i++ ) {
 		TAB_LIST[i].indent--;
@@ -80,17 +81,12 @@ function make( tab , index , indent ) {
 	TAB_LIST.splice( index , 0 , data );
 	sendMessage( { "create" : { "tab" : tab , "data" : data , "index" : index } } );
 }
-async function makeAll() {
-	let tabs = await browser.tabs.query( { "currentWindow" : true } );
-	// tabs.forEach( tab => make( tab , TAB_LIST.length , 0 ) );
-	let j = tabs.length - 1;
-	tabs.forEach( ( tab , i ) => onCreated( tab , i != j ) );
-	setSuccessors();
+function save() {
+	browser.storage.local.set( { "data" : TAB_LIST } );
 }
 async function onActivated( activeInfo ) {
 	sendMessage( { "active" : { "id" : activeInfo.tabId , "prevId" : activeInfo.previousTabId } } );
 	showActive( getIndex( activeInfo.tabId ) );
-	console.log( "onActivated" );
 }
 function onCreated( tab , startup = false ) {
 	let parent = getIndex( tab.openerTabId );
@@ -106,50 +102,120 @@ function onCreated( tab , startup = false ) {
 	if ( !startup ) {
 		setSuccessors();
 	}
-	console.log( "onCreated" );
+	save();
+		console.log( "TAB_LIST" );
+		TAB_LIST.forEach( v => console.log( v ) );
 }
 function onRemoved( tabId , removeInfo ) {
 	let index = getIndex( tabId );
-	let parent = getParent( index );
-	let lastDescendant = getLastDescendant( index ); // this must be defined outside the for loop. trust me.
-	freeChildren( index , lastDescendant );
+	let parent = getParent( index ); // needs to be defined before TAB_LIST.splice().
+	freeChildren( index );
 	TAB_LIST.splice( index , 1 );
 	sendMessage( { "remove" : { "id" : tabId } } );
 	updateParent( parent );
 	setSuccessors();
 	// browser.sessions.getRecentlyClosed().then( s => {closedTabs = s;console.log( closedTabs );} );
-	console.log( "onRemoved" );
+	save();
+		console.log( "TAB_LIST" );
+		TAB_LIST.forEach( v => console.log( v ) );
 }
 function onUpdated( tabId , changeInfo , tab ) {
 	let data = TAB_LIST[getIndex( tabId )];
 	if ( data != undefined ) sendUpdate( tab , data );
-	console.log( "onUpdated" );
 }
+// function onMoved( tabId , moveInfo ) {
+// 	console.log( "a tab moved" );
+// }
+
 function connected( p ) {
 	port = p;
-	p.postMessage( result );
 	p.onMessage.addListener( ( message , sender ) => {
+		console.log( message );
 		if ( message.hideChildren ) {
 			let index = getIndex( message.hideChildren.id );
 			let hide = !TAB_LIST[index].hideChildren;
 			hideChildren( index , hide )
 		}
+		if ( message.move ) {
+			let oldIndex = getIndex( message.move.from );
+			let oldLastDescendant = getLastDescendant( oldIndex );
+			let moveTo = getIndex( message.move.to );
+			if ( moveTo >= oldIndex && moveTo <= oldLastDescendant ) return;
+			let oldIndent = TAB_LIST[oldIndex].indent;
+			let newIndent = TAB_LIST[moveTo].indent + ( message.move.type % 2 );
+			let oldParent = getParent( oldIndex );
+			let newIndex = message.move.type == 0 ? moveTo : moveTo + 1;
+			let moveCount = 1 + ( oldLastDescendant - oldIndex );
+			let newSpliceIndex = newIndex > oldIndex ? newIndex - moveCount : newIndex;
+			let oldSlice = TAB_LIST.slice( oldIndex , oldLastDescendant + 1 );
+			oldSlice.forEach( v => v.indent = newIndent + ( v.indent - oldIndent ) ); // this modifies entries in TAB_LIST, so I need to do this right before the splice.
+			TAB_LIST.splice( oldIndex , oldSlice.length );
+			TAB_LIST.splice( newSpliceIndex , 0 , ...oldSlice );
+			if ( oldParent != -1 ) updateParent( newIndex < oldIndex ? oldParent + moveCount : oldParent );
+			updateParent( getParent( newSpliceIndex ) );
+			let moveFrom = oldSlice.map( v => { return { "id" : v.id , "indent" : v.indent } } );
+			let newMoveTo = newIndex;
+			sendMessage( { "move" : { "moveTo" : newMoveTo , "moveFrom" : moveFrom } } );
+			setSuccessors();
+			save();
+			let moveTabs = oldSlice.map( v => v.id );
+			browser.tabs.move( moveTabs , { "index" : newIndex } );
+
+
+		console.log( "TAB_LIST" );
+		TAB_LIST.forEach( v => console.log( v ) );
+			// // need to move children aswell.
+		}
 	} );
-	console.log( "dongs3" )
-	makeAll();
+	TAB_LIST.forEach( ( v , i ) => {
+		browser.tabs.get( v.id ).then( tab => {
+			sendMessage( { "create" : { "tab" : tab , "data" : v , "index" : i } } );
+		} );
+	} );
 }
-let port , result , TAB_LIST = [];
+function updateTAB_LISTOnRestart( savedData ) {
+	browser.tabs.query( { "currentWindow" : true } ).then( tabs => {
+		tabs.forEach( ( v , i ) => {
+			// console.log( v.id );
+			savedData[i].id = v.id;
+		} );
+		TAB_LIST = savedData;
+	} );
+}
+let port , TAB_LIST = [];
 browser.storage.local.get( null , r => {
-	result = r;
+	// r.data.forEach( v => console.log( v.id ) );
+	// console.log( "before is old ids, after is new ids")
+	// updateTAB_LISTOnRestart( r.data );
+	r.data = false;
+	browser.tabs.query( { "currentWindow" : true } ).then( tabs => {
+		if ( r.data ) {
+			tabs.forEach( ( v , i ) => {
+				// console.log( v.id );
+				r.data[i].id = v.id;
+			} );
+			TAB_LIST = r.data;
+		}
+		else {
+			tabs.forEach( tab => {
+				onCreated( tab , true );
+			} );
+		}
+		console.log( "TAB_LIST" );
+		TAB_LIST.forEach( v => console.log( v ) );
+	} );
+
+
+	// browser.tabs.query( { "currentWindow" : true } ).then( tabs => tabs.forEach( v => console.log( v.id ) ) );
 	browser.runtime.onConnect.addListener( connected );
 
-	browser.tabs.onActivated.addListener( onActivated )
-	// browser.tabs.onAttached.addListener() // will probably just call onCreated
-	browser.tabs.onCreated.addListener( onCreated ) // need logic for where to put the tab in the list.
-	// browser.tabs.onDetached.addListener() // will probably just call onRemoved
-	// browser.tabs.onMoved.addListener() // If I remove the tab bar, this wont be nessessary.
-	browser.tabs.onRemoved.addListener( onRemoved )
-	browser.tabs.onUpdated.addListener( onUpdated )
+	browser.tabs.onActivated.addListener( onActivated );
+	// browser.tabs.onAttached.addListener(); // will probably just call onCreated
+	browser.tabs.onCreated.addListener( onCreated ); // need logic for where to put the tab in the list.
+	// browser.tabs.onDetached.addListener(); // will probably just call onRemoved
+	// browser.tabs.onMoved.addListener( onMoved ); // If I remove the tab bar, this wont be nessessary.
+	browser.tabs.onRemoved.addListener( onRemoved );
+	browser.tabs.onUpdated.addListener( onUpdated );
 } );
 
 
