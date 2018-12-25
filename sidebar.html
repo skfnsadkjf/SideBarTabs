@@ -5,21 +5,13 @@
 	<link rel="stylesheet" href="sidebar.css"/>
 	<script src="sidebar.js" defer></script>
 
-	<template id="tabTemplate"><table class="tab"><tbody><tr><td class="expand"><div class="triangle"></div></td><td class="favicon"><img></img></td><td class="title"></td></tr></tbody></table></template>
+	<template id="tabTemplate"><div class="tab"><div class="tabMargin"><div class="tabContent"><div class="expand"><div class="triangle"></div></div><div class="favicon"><img></img></div><div class="title"></div></div></div></div></template>
 </head>
 <body>
 	<div id="tabList"><div id="newTab"><img src="icons/close.png"></img></div></div>
-
-	<table>
-		<tr id="dragTR" style="display:none;">
-			<td>
-				<div id="drag">
-					<div id="drag0" class="drag"></div>
-					<div id="drag1" class="drag"></div>
-					<div id="drag2" class="drag"></div>
-				</div>
-			</td>
-		</tr>
-	</table>
-
+	<div id="drag" style="display:none;">
+		<div id="drag0" class="drag"></div>
+		<div id="drag1" class="drag"></div>
+		<div id="drag2" class="drag"></div>
+	</div>
 </body>

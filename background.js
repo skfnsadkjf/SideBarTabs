@@ -218,13 +218,9 @@ browser.storage.local.get( null , r => {
 
 // maybe set successor of a new non-child tab to be the previously acitve tab, only until active tab changes.
 
-// detect if mouse in sideBar when dragging
-	// if not, don't alter (hover)
-	// if mouse in sideBar but below all tabs then move tab to end of tablist.
-
 // when implement storage
 // change makeAll to make all of TAB_LIST independently of onCreated
-
+	// for performance reasons.
 
 // save on onCreated, onRemoved, onMoved, onAttached, onDetached.
 

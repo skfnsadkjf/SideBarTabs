@@ -1,7 +1,7 @@
 const MOVE_TO = ["moveToTop" , "moveToCenter" , "moveToBottom"];
 const PORT = browser.runtime.connect( { name : "sidebar" } );
 const TABS_ELEM = document.getElementById( "tabList" );
-const HOVER_ELEM = document.getElementById( "dragTR" );
+const HOVER_ELEM = document.getElementById( "drag" );
 let tabToMove;
 function getTab( elem ) {
 	return elem.classList.contains( "tab" ) ? elem : getTab( elem.parentElement );
@@ -19,10 +19,10 @@ function dblclick( e ) {
 	PORT.postMessage( { "hideChildren" : { "id" : getTabId( e.target ) } } );
 }
 function setMargin( elem , indent ) {
-	elem.style["margin-left"] = String( 10 * indent ) + "px";
+	elem.firstElementChild.style["margin-left"] = String( 10 * indent ) + "px";
 }
 function drag( e ) {
-	if ( e.target.tagName == "TD" ) {
+	if ( e.target.tagName == "DIV" && e.target.id != "newTab" ) {
 		HOVER_ELEM.style.display = "";
 		let x = getTab( e.target ).firstElementChild; // firstElementChild to get the <tbody> rather than <table>
 		x.appendChild( HOVER_ELEM );
@@ -65,13 +65,15 @@ function makeElem( tab , data ) {
 	// elem.querySelector( ".close" ).addEventListener( "click" , closeTab ); // may want to reinstate the "x" to close tabs.
 	setMargin( elem , data.indent );
 	elem.addEventListener( "mousedown" , clicked );
-	elem.addEventListener( "dblclick" , dblclick );
-	elem.querySelector( ".expand" ).addEventListener( "mousedown" , dblclick );
-	if ( tab.favIconUrl ) { elem.querySelector( ".favicon" ).firstChild.src = tab.favIconUrl }
+	if ( tab.favIconUrl ) { elem.querySelector( "IMG" ).src = tab.favIconUrl }
 	if ( tab.active ) { elem.classList.add( "active" ) }
 
 	if ( data.hide ) { elem.style.display = "none" }
-	if ( data.hasChildren ) { elem.querySelector( ".triangle" ).classList.add( data.hideChildren ? "right" : "down" ) }
+	if ( data.hasChildren ) {
+		elem.querySelector( ".triangle" ).classList.add( data.hideChildren ? "right" : "down" );
+		elem.addEventListener( "dblclick" , dblclick );
+		elem.querySelector( ".expand" ).addEventListener( "mousedown" , dblclick );
+	}
 
 	return elem;
 }
