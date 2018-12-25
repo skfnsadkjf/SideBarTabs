@@ -3,12 +3,23 @@
 	<meta charset="utf-8">
 	<title>Tabs</title>
 	<link rel="stylesheet" href="sidebar.css"/>
-	<script src="sidebar.js"></script>
+	<script src="sidebar.js" defer></script>
 
-	<!-- <template id="tabTemplate"><table class="tab"><td class="expand"><div class="triangle"></div></td><td class="favicon"><img></img></td><td class="title"></td><td class="close"><img src="icons/close.png"></img></td></table></template> -->
-	<template id="tabTemplate"><table class="tab"><td class="expand"><div class="triangle"></div></td><td class="favicon"><img></img></td><td class="title"></td></table></template>
+	<template id="tabTemplate"><table class="tab"><tbody><tr><td class="expand"><div class="triangle"></div></td><td class="favicon"><img></img></td><td class="title"></td></tr></tbody></table></template>
 </head>
 <body>
 	<div id="tabList"><div id="newTab"><img src="icons/close.png"></img></div></div>
+
+	<table>
+		<tr id="dragTR" style="display:none;">
+			<td>
+				<div id="drag">
+					<div id="drag0" class="drag"></div>
+					<div id="drag1" class="drag"></div>
+					<div id="drag2" class="drag"></div>
+				</div>
+			</td>
+		</tr>
+	</table>
 
 </body>

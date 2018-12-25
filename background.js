@@ -103,8 +103,6 @@ function onCreated( tab , startup = false ) {
 		setSuccessors();
 	}
 	save();
-		console.log( "TAB_LIST" );
-		TAB_LIST.forEach( v => console.log( v ) );
 }
 function onRemoved( tabId , removeInfo ) {
 	let index = getIndex( tabId );
@@ -116,8 +114,6 @@ function onRemoved( tabId , removeInfo ) {
 	setSuccessors();
 	// browser.sessions.getRecentlyClosed().then( s => {closedTabs = s;console.log( closedTabs );} );
 	save();
-		console.log( "TAB_LIST" );
-		TAB_LIST.forEach( v => console.log( v ) );
 }
 function onUpdated( tabId , changeInfo , tab ) {
 	let data = TAB_LIST[getIndex( tabId )];
@@ -130,41 +126,36 @@ function onUpdated( tabId , changeInfo , tab ) {
 function connected( p ) {
 	port = p;
 	p.onMessage.addListener( ( message , sender ) => {
-		console.log( message );
 		if ( message.hideChildren ) {
 			let index = getIndex( message.hideChildren.id );
 			let hide = !TAB_LIST[index].hideChildren;
 			hideChildren( index , hide )
 		}
-		if ( message.move ) {
+		if ( message.move ) { // when the user drags a tab in the sideBar ui.
 			let oldIndex = getIndex( message.move.from );
 			let oldLastDescendant = getLastDescendant( oldIndex );
 			let moveTo = getIndex( message.move.to );
-			if ( moveTo >= oldIndex && moveTo <= oldLastDescendant ) return;
+			if ( message.move.type != 3 && moveTo >= oldIndex && moveTo <= oldLastDescendant ) return;
+			let newIndex = ( message.move.type == 0 ) ? moveTo : moveTo + 1;
+			if ( message.move.type == 2 && hasChildren( moveTo ) ) message.move.type = 1;
 			let oldIndent = TAB_LIST[oldIndex].indent;
 			let newIndent = TAB_LIST[moveTo].indent + ( message.move.type % 2 );
+			if ( message.move.type == 3 ) newIndent = 0;
 			let oldParent = getParent( oldIndex );
-			let newIndex = message.move.type == 0 ? moveTo : moveTo + 1;
 			let moveCount = 1 + ( oldLastDescendant - oldIndex );
-			let newSpliceIndex = newIndex > oldIndex ? newIndex - moveCount : newIndex;
+			let newSpliceIndex = ( newIndex > oldIndex ) ? newIndex - moveCount : newIndex;
 			let oldSlice = TAB_LIST.slice( oldIndex , oldLastDescendant + 1 );
 			oldSlice.forEach( v => v.indent = newIndent + ( v.indent - oldIndent ) ); // this modifies entries in TAB_LIST, so I need to do this right before the splice.
 			TAB_LIST.splice( oldIndex , oldSlice.length );
 			TAB_LIST.splice( newSpliceIndex , 0 , ...oldSlice );
-			if ( oldParent != -1 ) updateParent( newIndex < oldIndex ? oldParent + moveCount : oldParent );
+			if ( oldParent != -1 ) updateParent( ( newIndex < oldIndex ) ? oldParent + moveCount : oldParent );
 			updateParent( getParent( newSpliceIndex ) );
 			let moveFrom = oldSlice.map( v => { return { "id" : v.id , "indent" : v.indent } } );
-			let newMoveTo = newIndex;
-			sendMessage( { "move" : { "moveTo" : newMoveTo , "moveFrom" : moveFrom } } );
+			sendMessage( { "move" : { "moveTo" : newIndex , "moveFrom" : moveFrom } } );
 			setSuccessors();
 			save();
 			let moveTabs = oldSlice.map( v => v.id );
 			browser.tabs.move( moveTabs , { "index" : newIndex } );
-
-
-		console.log( "TAB_LIST" );
-		TAB_LIST.forEach( v => console.log( v ) );
-			// // need to move children aswell.
 		}
 	} );
 	TAB_LIST.forEach( ( v , i ) => {
@@ -182,28 +173,31 @@ function updateTAB_LISTOnRestart( savedData ) {
 		TAB_LIST = savedData;
 	} );
 }
-let port , TAB_LIST = [];
-browser.storage.local.get( null , r => {
-	// r.data.forEach( v => console.log( v.id ) );
-	// console.log( "before is old ids, after is new ids")
-	// updateTAB_LISTOnRestart( r.data );
-	r.data = false;
+function updateTAB_LISTOnRestart( savedData ) {
 	browser.tabs.query( { "currentWindow" : true } ).then( tabs => {
-		if ( r.data ) {
+		if ( savedData ) {
 			tabs.forEach( ( v , i ) => {
 				// console.log( v.id );
-				r.data[i].id = v.id;
+				savedData[i].id = v.id;
 			} );
-			TAB_LIST = r.data;
+			TAB_LIST = savedData;
 		}
 		else {
 			tabs.forEach( tab => {
 				onCreated( tab , true );
 			} );
 		}
-		console.log( "TAB_LIST" );
-		TAB_LIST.forEach( v => console.log( v ) );
+		// console.log( "TAB_LIST" );
+		// TAB_LIST.forEach( v => console.log( v ) );
 	} );
+
+}
+let port , TAB_LIST = [];
+browser.storage.local.get( null , r => {
+	// r.data.forEach( v => console.log( v.id ) );
+	// console.log( "before is old ids, after is new ids")
+	// r.data = false;
+	updateTAB_LISTOnRestart( r.data );
 
 
 	// browser.tabs.query( { "currentWindow" : true } ).then( tabs => tabs.forEach( v => console.log( v.id ) ) );
@@ -218,6 +212,15 @@ browser.storage.local.get( null , r => {
 	browser.tabs.onUpdated.addListener( onUpdated );
 } );
 
+
+// tab moving is still fucked.
+// mouseup in indentation doesn't count as mouseup on that tab.
+
+// maybe set successor of a new non-child tab to be the previously acitve tab, only until active tab changes.
+
+// detect if mouse in sideBar when dragging
+	// if not, don't alter (hover)
+	// if mouse in sideBar but below all tabs then move tab to end of tablist.
 
 // when implement storage
 // change makeAll to make all of TAB_LIST independently of onCreated
@@ -234,11 +237,6 @@ browser.storage.local.get( null , r => {
 // fix indentation css stuff.
 
 // get it working in multiple windows.
-
-// do setup stuff on browser start.
-	// re-set all the ids in TAB_LIST
-
-// enable dragging of tabs
 
 // on right click open context menu
 // do things with options.

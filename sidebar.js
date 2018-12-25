@@ -1,5 +1,13 @@
-function getTabId( elem ){
-	return elem.classList.contains( "tab" ) ? parseInt( elem.id ) : getTabId( elem.parentElement );
+const MOVE_TO = ["moveToTop" , "moveToCenter" , "moveToBottom"];
+const PORT = browser.runtime.connect( { name : "sidebar" } );
+const TABS_ELEM = document.getElementById( "tabList" );
+const HOVER_ELEM = document.getElementById( "dragTR" );
+let tabToMove;
+function getTab( elem ) {
+	return elem.classList.contains( "tab" ) ? elem : getTab( elem.parentElement );
+}
+function getTabId( elem ) {
+	return parseInt( getTab( elem ).id );
 }
 function closeTab( e ) {
 	browser.tabs.remove( getTabId( e.target ) );
@@ -8,52 +16,47 @@ function newTab( e ) {
 	if ( e.button == 0 ) browser.tabs.create( {} );
 }
 function dblclick( e ) {
-	port.postMessage( { "hideChildren" : { "id" : getTabId( e.target ) } } );
+	PORT.postMessage( { "hideChildren" : { "id" : getTabId( e.target ) } } );
 }
-function getTab( elem ) {
-	if ( elem.tagName == "HTML" ) return undefined;
-	return elem.classList.contains( "tab" ) ? elem : getTab( elem.parentElement );
-}
-function getMoveTo( y ) {
-	let r = hover.getBoundingClientRect();
-	console.log( r.height )
-	// return Math.floor( ( y - r.top ) / ( r.height / 3 ) );
-	return Math.floor( ( y - r.top ) / ( 17 / 3 ) ); // sometimes r.height is 0, so I hardcoded it as 17
-}
-function moveTabs( y ) {
-	let from = getTabId( tabToMove );
-	let to = getTabId( hover );
-	let type = getMoveTo( y );
-	port.postMessage( { "move" : { "from" : from , "to" : to , "type" : type } } );
+function setMargin( elem , indent ) {
+	elem.style["margin-left"] = String( 10 * indent ) + "px";
 }
 function drag( e ) {
-	if ( hover ) hover.classList.remove( "moveToTop" , "moveToCenter" , "moveToBottom" );
-	hover = getTab( e.target );
-	if ( hover ) hover.classList.add( moveTo[getMoveTo( e.pageY )] );
-}
-function mouseup( e ) {
-	document.removeEventListener( "mousemove" , drag );
-	if ( hover ) {
-		hover.classList.remove( "moveToTop" , "moveToCenter" , "moveToBottom" );
-		if ( hover != tabToMove ) moveTabs( e.pageY );
+	if ( e.target.tagName == "TD" ) {
+		HOVER_ELEM.style.display = "";
+		let x = getTab( e.target ).firstElementChild; // firstElementChild to get the <tbody> rather than <table>
+		x.appendChild( HOVER_ELEM );
 	}
 }
+function mouseup( e ) {
+	if ( e.target.tagName && HOVER_ELEM.style.display != "none" ) { // checkes to see if mouseup occured in the sideBar window and that the mouse was dragged while mousedown'd.
+		let to , type , from = getTabId( tabToMove );
+		if ( e.target.classList.contains( "drag" ) ) { // if mouseup is over a tab
+			to = getTabId( e.target );
+			type = parseInt( e.target.id[4] );
+		}
+		else { // if mouseup is occurs on the newTab button or in the blank space below that.
+			to = parseInt( TABS_ELEM.children[TABS_ELEM.children.length - 2].id );
+			type = 3;
+		}
+		PORT.postMessage( { "move" : { "from" : from , "to" : to , "type" : type } } );
+	}
+	HOVER_ELEM.style.display = "none";
+	document.removeEventListener( "mousemove" , drag );
+	document.removeEventListener( "mouseup" , mouseup );
+}
 function clicked( e ) {
-	let tabId = getTabId( e.target );
+	e.preventDefault();
 	if ( e.button == 0 ) {
-		tabToMove = hover = getTab( e.target );
-		browser.tabs.update( tabId , { "active" : true } );
+		tabToMove = getTab( e.target );
+		browser.tabs.update( getTabId( e.target ) , { "active" : true } );
 		document.addEventListener( "mousemove" , drag );
 		document.addEventListener( "mouseup" , mouseup );
 	}
 	if ( e.button == 1 ) {
 		closeTab( e );
-		e.preventDefault();
 	}
 	// if ( e.button == 2 ) {} // do context menu stuff
-}
-function setMargin( elem , indent ) {
-	elem.style["margin-left"] = String( 10 * indent ) + "px";
 }
 function makeElem( tab , data ) {
 	let elem = document.importNode( document.getElementById( "tabTemplate" ) , true ).content.firstChild;
@@ -75,49 +78,42 @@ function makeElem( tab , data ) {
 
 
 
-const moveTo = ["moveToTop" , "moveToCenter" , "moveToBottom"];
-let TABS_ELEM , port , hover , tabToMove;
-window.onload = function() {
-	TABS_ELEM = document.getElementById( "tabList" );
-	document.getElementById( "newTab" ).addEventListener( "click" , newTab );
-
-	port = browser.runtime.connect( { name : "sidebar" } );
-	port.onMessage.addListener( ( message , sender ) => {
-		if ( message.update ) {
-			let oldElem = document.getElementById( message.update.data.id );
-			let newElem = makeElem( message.update.tab , message.update.data );
-			if ( oldElem ) oldElem.replaceWith( newElem ); // sometimes oldElem doesn't exist yet because message.create hasn't finished creating oldElem yet. It doesn't matter though.
+document.getElementById( "newTab" ).addEventListener( "click" , newTab );
+PORT.onMessage.addListener( ( message , sender ) => {
+	if ( message.update ) {
+		let oldElem = document.getElementById( message.update.data.id );
+		let newElem = makeElem( message.update.tab , message.update.data );
+		if ( oldElem ) oldElem.replaceWith( newElem ); // sometimes oldElem doesn't exist yet because message.create hasn't finished creating oldElem yet. It doesn't matter though.
+	}
+	if ( message.create ) {
+		let before = TABS_ELEM.children[message.create.index];
+		let elem = makeElem( message.create.tab , message.create.data );
+		TABS_ELEM.insertBefore( elem , before );
+	}
+	if ( message.remove ) {
+		document.getElementById( message.remove.id ).remove();
+	}
+	if ( message.hide ) {
+		document.getElementById( message.hide.id ).style.display = message.hide.hide ? "none" : "";
+	}
+	if ( message.indent ) {
+		setMargin( document.getElementById( message.indent.id ) , message.indent.indent );
+	}
+	if ( message.active ) {
+		document.getElementById( message.active.id ).classList.add( "active" );
+		if ( message.active.prevId != undefined ) {
+			document.getElementById( message.active.prevId ).classList.remove( "active" );
 		}
-		if ( message.create ) {
-			let before = TABS_ELEM.children[message.create.index];
-			let elem = makeElem( message.create.tab , message.create.data );
+	}
+	if ( message.move ) {
+		let before = TABS_ELEM.children[message.move.moveTo];
+		if ( message.move.moveFrom.some( v => v.id == parseInt( before.id ) ) ) {
+			before = TABS_ELEM.children[message.move.moveTo + message.move.moveFrom.length];
+		} // this prevents the edge case of calling insertBefore() with the same element as both arguments.
+		message.move.moveFrom.forEach( v => {
+			let elem = document.getElementById( v.id );
+			setMargin( elem , v.indent );
 			TABS_ELEM.insertBefore( elem , before );
-		}
-		if ( message.remove ) {
-			document.getElementById( message.remove.id ).remove();
-		}
-		if ( message.hide ) {
-			document.getElementById( message.hide.id ).style.display = message.hide.hide ? "none" : "";
-		}
-		if ( message.indent ) {
-			setMargin( document.getElementById( message.indent.id ) , message.indent.indent );
-		}
-		if ( message.active ) {
-			document.getElementById( message.active.id ).classList.add( "active" );
-			if ( message.active.prevId != undefined ) {
-				document.getElementById( message.active.prevId ).classList.remove( "active" );
-			}
-		}
-		if ( message.move ) {
-			let before = TABS_ELEM.children[message.move.moveTo];
-			if ( message.move.moveFrom.map( v => v.id ).includes ( parseInt( before.id ) ) ) {
-				before = TABS_ELEM.children[message.move.moveTo + message.move.moveFrom.length];
-			} // this prevents the edge case of calling insertBefore() with the same element as both arguments.
-			message.move.moveFrom.forEach( v => {
-				let elem = document.getElementById( v.id );
-				setMargin( elem , v.indent );
-				TABS_ELEM.insertBefore( elem , before );
-			} );
-		}
-	} );
-}
+		} );
+	}
+} );

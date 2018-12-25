@@ -1,4 +1,6 @@
-:root {}
+:root {
+	--tabHeight: 16px;
+}
 body {
 	height: 100%;
 	background-color: #444444;
@@ -72,9 +74,23 @@ img {
 
 
 
-
-
-
+table {
+	position: relative;
+}
+#drag {
+	position: absolute;
+	top: 0px;
+	width: 100%;
+}
+#drag0 { height: 4px; }
+/*#drag0 { border-top:3px solid magenta; }*/
+#drag0:hover { border-top:3px solid magenta; }
+#drag1 { height: 8px; }
+/*#drag1 { border:2px solid black; }*/
+#drag1:hover { border:2px solid black; }
+#drag2 { height: 4px; }
+/*#drag2 { border-bottom:3px solid purple; }*/
+#drag2:hover { border-bottom:3px solid purple; }
 
 
 
