@@ -22,7 +22,7 @@ function setMargin( elem , indent ) {
 	elem.firstElementChild.style["margin-left"] = String( 10 * indent ) + "px";
 }
 function drag( e ) {
-	if ( e.target.tagName == "DIV" && e.target.id != "newTab" ) {
+	if ( e.target.tagName == "DIV" && e.target.id != "newTab" && e.target.id != "tabList" ) {
 		HOVER_ELEM.style.display = "";
 		let x = getTab( e.target ).firstElementChild; // firstElementChild to get the <tbody> rather than <table>
 		x.appendChild( HOVER_ELEM );
@@ -108,14 +108,9 @@ PORT.onMessage.addListener( ( message , sender ) => {
 		}
 	}
 	if ( message.move ) {
-		let before = TABS_ELEM.children[message.move.moveTo];
-		if ( message.move.moveFrom.some( v => v.id == parseInt( before.id ) ) ) {
-			before = TABS_ELEM.children[message.move.moveTo + message.move.moveFrom.length];
-		} // this prevents the edge case of calling insertBefore() with the same element as both arguments.
-		message.move.moveFrom.forEach( v => {
-			let elem = document.getElementById( v.id );
-			setMargin( elem , v.indent );
-			TABS_ELEM.insertBefore( elem , before );
-		} );
+		let fromElem = TABS_ELEM.children[message.move.from];
+		let toIndex = message.move.to + ( message.move.to > message.move.from ? 1 : 0 );
+		let toElem = TABS_ELEM.children[toIndex];
+		TABS_ELEM.insertBefore( fromElem , toElem );
 	}
 } );

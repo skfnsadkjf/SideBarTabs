@@ -84,7 +84,7 @@ function make( tab , index , indent ) {
 function save() {
 	browser.storage.local.set( { "data" : TAB_LIST } );
 }
-async function onActivated( activeInfo ) {
+function onActivated( activeInfo ) {
 	sendMessage( { "active" : { "id" : activeInfo.tabId , "prevId" : activeInfo.previousTabId } } );
 	showActive( getIndex( activeInfo.tabId ) );
 }
@@ -103,8 +103,20 @@ function onCreated( tab , startup = false ) {
 		setSuccessors();
 	}
 	save();
+
+	browser.sessions.getTabValue( tab.id , "data" ).then( v => {
+		if ( v ) {
+			// move this tab into place
+			// move children of this tab into place
+		}
+		browser.sessions.setTabValue( tab.id , "oldId" , tab.id );
+	});
 }
+let closedTabs = {};
 function onRemoved( tabId , removeInfo ) {
+	closedTabs[tabId] = { };
+
+
 	let index = getIndex( tabId );
 	let parent = getParent( index ); // needs to be defined before TAB_LIST.splice().
 	freeChildren( index );
@@ -112,17 +124,26 @@ function onRemoved( tabId , removeInfo ) {
 	sendMessage( { "remove" : { "id" : tabId } } );
 	updateParent( parent );
 	setSuccessors();
-	// browser.sessions.getRecentlyClosed().then( s => {closedTabs = s;console.log( closedTabs );} );
 	save();
 }
 function onUpdated( tabId , changeInfo , tab ) {
 	let data = TAB_LIST[getIndex( tabId )];
 	if ( data != undefined ) sendUpdate( tab , data );
 }
-// function onMoved( tabId , moveInfo ) {
-// 	console.log( "a tab moved" );
-// }
-
+function onMoved( tabId , moveInfo ) {
+	let from = TAB_LIST.splice( moveInfo.fromIndex , 1 )[0];
+	TAB_LIST.splice( moveInfo.toIndex , 0 , from );
+	sendMessage( { "move" : { "to" : moveInfo.toIndex , "from" : moveInfo.fromIndex } } );
+}
+function updateIndents( slice , toIndent , type ) {
+	let fromIndent = slice[0].indent;
+	if ( type == 1 ) toIndent++;
+	if ( type == 3 ) toIndent = 0;
+	slice.forEach( v => {
+		v.indent = toIndent + ( v.indent - fromIndent ) ;
+		sendMessage( { "indent" : { "id" : v.id , "indent" : v.indent } } );
+	} );
+}
 function connected( p ) {
 	port = p;
 	p.onMessage.addListener( ( message , sender ) => {
@@ -133,29 +154,15 @@ function connected( p ) {
 		}
 		if ( message.move ) { // when the user drags a tab in the sideBar ui.
 			let oldIndex = getIndex( message.move.from );
-			let oldLastDescendant = getLastDescendant( oldIndex );
 			let moveTo = getIndex( message.move.to );
-			if ( message.move.type != 3 && moveTo >= oldIndex && moveTo <= oldLastDescendant ) return;
-			let newIndex = ( message.move.type == 0 ) ? moveTo : moveTo + 1;
-			if ( message.move.type == 2 && hasChildren( moveTo ) ) message.move.type = 1;
-			let oldIndent = TAB_LIST[oldIndex].indent;
-			let newIndent = TAB_LIST[moveTo].indent + ( message.move.type % 2 );
-			if ( message.move.type == 3 ) newIndent = 0;
-			let oldParent = getParent( oldIndex );
-			let moveCount = 1 + ( oldLastDescendant - oldIndex );
-			let newSpliceIndex = ( newIndex > oldIndex ) ? newIndex - moveCount : newIndex;
-			let oldSlice = TAB_LIST.slice( oldIndex , oldLastDescendant + 1 );
-			oldSlice.forEach( v => v.indent = newIndent + ( v.indent - oldIndent ) ); // this modifies entries in TAB_LIST, so I need to do this right before the splice.
-			TAB_LIST.splice( oldIndex , oldSlice.length );
-			TAB_LIST.splice( newSpliceIndex , 0 , ...oldSlice );
-			if ( oldParent != -1 ) updateParent( ( newIndex < oldIndex ) ? oldParent + moveCount : oldParent );
-			updateParent( getParent( newSpliceIndex ) );
-			let moveFrom = oldSlice.map( v => { return { "id" : v.id , "indent" : v.indent } } );
-			sendMessage( { "move" : { "moveTo" : newIndex , "moveFrom" : moveFrom } } );
-			setSuccessors();
-			save();
-			let moveTabs = oldSlice.map( v => v.id );
-			browser.tabs.move( moveTabs , { "index" : newIndex } );
+			let oldLastDescendant = getLastDescendant( oldIndex );
+			if ( message.move.type != 3 && moveTo >= oldIndex && moveTo <= oldLastDescendant ) return; // if moving to same location or to child.
+			let slice = TAB_LIST.slice( oldIndex , oldLastDescendant + 1 );
+			updateIndents( slice , TAB_LIST[moveTo].indent , message.move.type );
+			if ( moveTo > oldIndex ) moveTo--;
+			if ( message.move.type > 0 ) moveTo++;
+			let moveTabs = slice.map( v => v.id );
+			browser.tabs.move( moveTabs , { "index" : moveTo } );
 		}
 	} );
 	TAB_LIST.forEach( ( v , i ) => {
@@ -164,20 +171,10 @@ function connected( p ) {
 		} );
 	} );
 }
-function updateTAB_LISTOnRestart( savedData ) {
-	browser.tabs.query( { "currentWindow" : true } ).then( tabs => {
-		tabs.forEach( ( v , i ) => {
-			// console.log( v.id );
-			savedData[i].id = v.id;
-		} );
-		TAB_LIST = savedData;
-	} );
-}
-function updateTAB_LISTOnRestart( savedData ) {
+function dataInit( savedData ) {
 	browser.tabs.query( { "currentWindow" : true } ).then( tabs => {
 		if ( savedData ) {
 			tabs.forEach( ( v , i ) => {
-				// console.log( v.id );
 				savedData[i].id = v.id;
 			} );
 			TAB_LIST = savedData;
@@ -187,17 +184,18 @@ function updateTAB_LISTOnRestart( savedData ) {
 				onCreated( tab , true );
 			} );
 		}
-		// console.log( "TAB_LIST" );
-		// TAB_LIST.forEach( v => console.log( v ) );
 	} );
-
 }
 let port , TAB_LIST = [];
 browser.storage.local.get( null , r => {
 	// r.data.forEach( v => console.log( v.id ) );
 	// console.log( "before is old ids, after is new ids")
 	// r.data = false;
-	updateTAB_LISTOnRestart( r.data );
+	dataInit( r.data );
+
+
+
+
 
 
 	// browser.tabs.query( { "currentWindow" : true } ).then( tabs => tabs.forEach( v => console.log( v.id ) ) );
@@ -207,30 +205,26 @@ browser.storage.local.get( null , r => {
 	// browser.tabs.onAttached.addListener(); // will probably just call onCreated
 	browser.tabs.onCreated.addListener( onCreated ); // need logic for where to put the tab in the list.
 	// browser.tabs.onDetached.addListener(); // will probably just call onRemoved
-	// browser.tabs.onMoved.addListener( onMoved ); // If I remove the tab bar, this wont be nessessary.
+	browser.tabs.onMoved.addListener( onMoved ); // If I remove the tab bar, this wont be nessessary.
 	browser.tabs.onRemoved.addListener( onRemoved );
 	browser.tabs.onUpdated.addListener( onUpdated );
 } );
 
 
-// tab moving is still fucked.
-// mouseup in indentation doesn't count as mouseup on that tab.
+// instead of using the sessions api for everything, I should only record a tab's id onCreated() and store other data maunaully onRemoved().
+// JUST DO THIS!!!!!
+
+// move stuff in message.move to onMoved(). so that I can do sessions api onmoved and oncreated.
 
 // maybe set successor of a new non-child tab to be the previously acitve tab, only until active tab changes.
 
-// when implement storage
-// change makeAll to make all of TAB_LIST independently of onCreated
-	// for performance reasons.
-
 // save on onCreated, onRemoved, onMoved, onAttached, onDetached.
 
-
-// do saving and loading tree data. particularly on browser restart.
-// do this before undo close tab
-
 // remake tree on undo close tab.
-
-// fix indentation css stuff.
+// set tab.id in sessions whenever a tab is created
+// attach tab data to stored tabId onRemoved
+// detect restore closed tab
+// on restore apply remembered data.
 
 // get it working in multiple windows.
 
