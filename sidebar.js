@@ -1,4 +1,4 @@
-const MOVE_TO = ["moveToTop" , "moveToCenter" , "moveToBottom"];
+// const MOVE_TO = ["moveToTop" , "moveToCenter" , "moveToBottom"];
 const PORT = browser.runtime.connect( { name : "sidebar" } );
 const TABS_ELEM = document.getElementById( "tabList" );
 const HOVER_ELEM = document.getElementById( "drag" );
@@ -88,9 +88,9 @@ PORT.onMessage.addListener( ( message , sender ) => {
 		if ( oldElem ) oldElem.replaceWith( newElem ); // sometimes oldElem doesn't exist yet because message.create hasn't finished creating oldElem yet. It doesn't matter though.
 	}
 	if ( message.create ) {
-		let before = TABS_ELEM.children[message.create.index];
-		let elem = makeElem( message.create.tab , message.create.data );
-		TABS_ELEM.insertBefore( elem , before );
+		let toElem = TABS_ELEM.children[message.create.index];
+		let fromElem = makeElem( message.create.tab , message.create.data );
+		TABS_ELEM.insertBefore( fromElem , toElem );
 	}
 	if ( message.remove ) {
 		document.getElementById( message.remove.id ).remove();
@@ -114,3 +114,7 @@ PORT.onMessage.addListener( ( message , sender ) => {
 		TABS_ELEM.insertBefore( fromElem , toElem );
 	}
 } );
+
+
+
+

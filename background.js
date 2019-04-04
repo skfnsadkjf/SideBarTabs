@@ -7,13 +7,17 @@ function hasChildren( i ) {
 function getParent( j , i = j ) {
 	return i > 0 && TAB_LIST[i - 1].indent >= TAB_LIST[j].indent ? getParent( j , i - 1 ) : i - 1;
 }
+function getAncestors( index , r = [] ) {
+	let parent = getParent( index );
+	return ( parent > -1 ) ? getAncestors( parent , r.concat( parent ) ) : r;
+}
 function getLastDescendant( parent ) {
 	return TAB_LIST.findIndex( ( v , i , arr ) => i == arr.length - 1 || i + 1 > parent && arr[i + 1].indent <= arr[parent].indent );
 }
-function getLastChild( parent ) {
-	if ( parent == -1 ) { return TAB_LIST.map( v => v.indent ).lastIndexOf( 0 ) }
-	let descendants = TAB_LIST.slice( parent + 1 , getLastDescendant( parent ) + 1 )
-	return descendants.map( v => v.indent ).lastIndexOf( TAB_LIST[parent].indent + 1 ) + parent + 1;
+function getChildren( parent ) { // only direct children. Not all descendants.
+	let lastDescendant = ( parent != -1 ) ? getLastDescendant( parent ) : TAB_LIST.length - 1;
+	let indent = ( parent != -1 ) ? TAB_LIST[parent].indent + 1 : 0;
+	return TAB_LIST.filter( ( v , i ) => i > parent && i <= lastDescendant && v.indent == indent );
 }
 function sendMessage( message ) {
 	if ( port ) port.postMessage( message );
@@ -62,7 +66,7 @@ function showActive( index ) {
 }
 function setSuccessors() {
 	TAB_LIST.forEach( ( v , i , arr ) => {
-		let successor = arr[i + 1] && v.indent > arr[i + 1].indent ? arr[i - 1].id : -1;
+		let successor = ( arr[i + 1] && v.indent > arr[i + 1].indent ) ? arr[i - 1].id : -1;
 		if ( v.successor != successor ) {
 			v.successor = successor;
 			browser.tabs.update( TAB_LIST[i].id , { "successorTabId" : successor } );
@@ -90,60 +94,91 @@ function onActivated( activeInfo ) {
 }
 function onCreated( tab , startup = false ) {
 	let parent = getIndex( tab.openerTabId );
-	let notChild = tab.title == "New Tab" || tab.openerTabId == undefined || startup;
-	let index = notChild ? TAB_LIST.length : parent + 1; // will need to alter "parent + 1" for ctrl+shift+t
+	let notChild = tab.openerTabId == undefined || startup;
 	let indent = notChild ? 0 : TAB_LIST[parent].indent + 1;
-	make( tab , index , indent );
-	updateParent( parent );
-	browser.tabs.move( tab.id , { "index" : index } ); // I need this so ctrl-tab and the like work correctly
-	if ( indent > 0 ) {
-		hideChildren( getParent( index ) , false );
-	}
-	if ( !startup ) {
-		setSuccessors();
-	}
-	save();
+	make( tab , tab.index , indent );
+	browser.sessions.getTabValue( tab.id , "oldId" ).then( id => {
+		let index = notChild ? TAB_LIST.length - 1 : parent + 1;
 
-	browser.sessions.getTabValue( tab.id , "data" ).then( v => {
-		if ( v ) {
-			// move this tab into place
-			// move children of this tab into place
-		}
+
 		browser.sessions.setTabValue( tab.id , "oldId" , tab.id );
-	});
+		let data = closedTabs[id];
+		if ( data ) {
+			let ancestorIndexes = data.ancestors.map( v => getIndex( v ) );
+			let parentId = ancestorIndexes.find( v => v != -1 );
+			if ( parentId != undefined ) {
+				let parent = getIndex( parentId );
+				let siblings = getChildren( parent );
+				let nextSibling = getIndex( data.nextSibling );
+				let prevSibling = getIndex( data.prevSibling );
+				if ( nextSibling > -1 ) { index = nextSibling }
+				else if ( prevSibling > -1 ) { index = getLastDescendant( prevSibling ) + 1 }
+				else { index = parent + 1 }
+			}
+			// else {} // Just do nothing because default FF behavior does what I want here.
+
+			// move children of this tab into place
+			// browser.tabs.move( data.children , { "index" : newIndex } );
+			delete closedTabs[id];
+		}
+		browser.tabs.move( tab.id , { "index" : index } ).then( v => {
+			updateParent( parent );
+			if ( indent > 0 ) {
+				hideChildren( getParent( index ) , false );
+			}
+			if ( !startup ) {
+				setSuccessors();
+			}
+			save();
+		}); // I need this so ctrl-tab and the like work correctly
+	} );
 }
+
 let closedTabs = {};
 function onRemoved( tabId , removeInfo ) {
-	closedTabs[tabId] = { };
-
-
 	let index = getIndex( tabId );
 	let parent = getParent( index ); // needs to be defined before TAB_LIST.splice().
+	let ancestors = getAncestors( index );
+	let siblings = getChildren( parent );
+	let children = getChildren( index );
+	let childIndex = siblings.findIndex( v => v.id == tabId );
 	freeChildren( index );
 	TAB_LIST.splice( index , 1 );
 	sendMessage( { "remove" : { "id" : tabId } } );
 	updateParent( parent );
 	setSuccessors();
 	save();
+	closedTabs[tabId] = {
+		"ancestors" : ancestors.map( v => v.id ) ,
+		"siblings" : siblings.map( v => v.id ) ,
+		"children" : children.map( v => v.id ) ,
+		"childIndex" : childIndex ,
+		"prevSibling" : ( childIndex > 0 ) ? siblings[childIndex - 1].id : false ,
+		"nextSibling" : ( childIndex < siblings.length - 2 ) ? siblings[childIndex + 1].id : false
+	};
 }
 function onUpdated( tabId , changeInfo , tab ) {
 	let data = TAB_LIST[getIndex( tabId )];
 	if ( data != undefined ) sendUpdate( tab , data );
 }
 function onMoved( tabId , moveInfo ) {
+	// console.log( TAB_LIST.reduce( ( acc , v ) => acc + " " + v.id , "" ) );
 	let from = TAB_LIST.splice( moveInfo.fromIndex , 1 )[0];
 	TAB_LIST.splice( moveInfo.toIndex , 0 , from );
+	// console.log( TAB_LIST.reduce( ( acc , v ) => acc + " " + v.id , "" ) );
 	sendMessage( { "move" : { "to" : moveInfo.toIndex , "from" : moveInfo.fromIndex } } );
+	save();
 }
 function updateIndents( slice , toIndent , type ) {
 	let fromIndent = slice[0].indent;
-	if ( type == 1 ) toIndent++;
-	if ( type == 3 ) toIndent = 0;
+	if ( type == 1 ) toIndent++; // type 0, 1, 2 are before, child of, after.
+	if ( type == 3 ) toIndent = 0; // type 3 is when tab is moved to empty space after the last tab.
 	slice.forEach( v => {
 		v.indent = toIndent + ( v.indent - fromIndent ) ;
 		sendMessage( { "indent" : { "id" : v.id , "indent" : v.indent } } );
 	} );
 }
+
 function connected( p ) {
 	port = p;
 	p.onMessage.addListener( ( message , sender ) => {
@@ -158,11 +193,25 @@ function connected( p ) {
 			let oldLastDescendant = getLastDescendant( oldIndex );
 			if ( message.move.type != 3 && moveTo >= oldIndex && moveTo <= oldLastDescendant ) return; // if moving to same location or to child.
 			let slice = TAB_LIST.slice( oldIndex , oldLastDescendant + 1 );
+
+			let oldParent = getParent( oldIndex );
+			let oldParentId = oldParent >= 0 ? TAB_LIST[oldParent].id : -1;
+
+
 			updateIndents( slice , TAB_LIST[moveTo].indent , message.move.type );
 			if ( moveTo > oldIndex ) moveTo--;
 			if ( message.move.type > 0 ) moveTo++;
 			let moveTabs = slice.map( v => v.id );
-			browser.tabs.move( moveTabs , { "index" : moveTo } );
+			browser.tabs.move( moveTabs , { "index" : moveTo } ).then( tabs => {
+
+				if ( oldParent >= 0 ) {
+					updateParent( getIndex( oldParentId ) );
+				}
+				let index = getIndex( tabs[0].id );
+				updateParent( getParent( index ) );
+
+
+			} );
 		}
 	} );
 	TAB_LIST.forEach( ( v , i ) => {
@@ -174,12 +223,15 @@ function connected( p ) {
 function dataInit( savedData ) {
 	browser.tabs.query( { "currentWindow" : true } ).then( tabs => {
 		if ( savedData ) {
+			console.log( "data exists" );
+			console.log( savedData );
 			tabs.forEach( ( v , i ) => {
 				savedData[i].id = v.id;
 			} );
 			TAB_LIST = savedData;
 		}
 		else {
+			console.log( "data DOES NOT exist" );
 			tabs.forEach( tab => {
 				onCreated( tab , true );
 			} );
@@ -187,34 +239,31 @@ function dataInit( savedData ) {
 	} );
 }
 let port , TAB_LIST = [];
+
+
+// browser.tabs.query( { "currentWindow" : true } ).then( tabs => tabs.forEach( v => console.log( v.id ) ) );
+browser.runtime.onConnect.addListener( connected );
+
+browser.tabs.onActivated.addListener( onActivated );
+// browser.tabs.onAttached.addListener(); // will probably just call onCreated
+browser.tabs.onCreated.addListener( onCreated ); // need logic for where to put the tab in the list.
+// browser.tabs.onDetached.addListener(); // will probably just call onRemoved
+browser.tabs.onMoved.addListener( onMoved ); // If I remove the tab bar, this wont be nessessary.
+browser.tabs.onRemoved.addListener( onRemoved );
+browser.tabs.onUpdated.addListener( onUpdated );
 browser.storage.local.get( null , r => {
 	// r.data.forEach( v => console.log( v.id ) );
 	// console.log( "before is old ids, after is new ids")
 	// r.data = false;
 	dataInit( r.data );
-
-
-
-
-
-
-	// browser.tabs.query( { "currentWindow" : true } ).then( tabs => tabs.forEach( v => console.log( v.id ) ) );
-	browser.runtime.onConnect.addListener( connected );
-
-	browser.tabs.onActivated.addListener( onActivated );
-	// browser.tabs.onAttached.addListener(); // will probably just call onCreated
-	browser.tabs.onCreated.addListener( onCreated ); // need logic for where to put the tab in the list.
-	// browser.tabs.onDetached.addListener(); // will probably just call onRemoved
-	browser.tabs.onMoved.addListener( onMoved ); // If I remove the tab bar, this wont be nessessary.
-	browser.tabs.onRemoved.addListener( onRemoved );
-	browser.tabs.onUpdated.addListener( onUpdated );
 } );
 
 
-// instead of using the sessions api for everything, I should only record a tab's id onCreated() and store other data maunaully onRemoved().
-// JUST DO THIS!!!!!
+// get multiple windows working.
 
-// move stuff in message.move to onMoved(). so that I can do sessions api onmoved and oncreated.
+// get undo close tab working.
+
+// include visual when dragging below last tab.
 
 // maybe set successor of a new non-child tab to be the previously acitve tab, only until active tab changes.
 
@@ -233,5 +282,39 @@ browser.storage.local.get( null , r => {
 
 // do somthing about behaviour after last tab closed and undo last tab is done.
 // I'm thinking I'll wait to see if it gets fixed.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

@@ -1,10 +1,9 @@
 {
 	"manifest_version": 2,
-	"name": "Side Bar Tabs",
+	"name": "Sidebar Tabs",
 	"version": "1.0.0",
 
 	"description": "Makes a vertical sidebar for tabs",
-	"icons": { "48": "icons/beasts-48.png" },
 
 	"sidebar_action": {
 		"default_title": "Tabs",
