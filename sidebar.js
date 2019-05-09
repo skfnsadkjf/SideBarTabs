@@ -1,8 +1,3 @@
-// const MOVE_TO = ["moveToTop" , "moveToCenter" , "moveToBottom"];
-const PORT = browser.runtime.connect( { name : "sidebar" } );
-const TABS_ELEM = document.getElementById( "tabList" );
-const HOVER_ELEM = document.getElementById( "drag" );
-let tabToMove;
 function getTab( elem ) {
 	return elem.classList.contains( "tab" ) ? elem : getTab( elem.parentElement );
 }
@@ -16,7 +11,7 @@ function newTab( e ) {
 	if ( e.button == 0 ) browser.tabs.create( {} );
 }
 function dblclick( e ) {
-	PORT.postMessage( { "hideChildren" : { "id" : getTabId( e.target ) } } );
+	PORT.postMessage( { "hideChildren" : { "id" : getTabId( e.target ) } , "windowId" : WINDOW_ID } );
 }
 function setMargin( elem , indent ) {
 	elem.firstElementChild.style["margin-left"] = String( 10 * indent ) + "px";
@@ -39,7 +34,7 @@ function mouseup( e ) {
 			to = parseInt( TABS_ELEM.children[TABS_ELEM.children.length - 2].id );
 			type = 3;
 		}
-		PORT.postMessage( { "move" : { "from" : from , "to" : to , "type" : type } } );
+		PORT.postMessage( { "move" : { "from" : from , "to" : to , "type" : type } , "windowId" : WINDOW_ID } );
 	}
 	HOVER_ELEM.style.display = "none";
 	document.removeEventListener( "mousemove" , drag );
@@ -77,11 +72,12 @@ function makeElem( tab , data ) {
 
 	return elem;
 }
-
-
-
-document.getElementById( "newTab" ).addEventListener( "click" , newTab );
-PORT.onMessage.addListener( ( message , sender ) => {
+function messageHandler( message , sender ) {
+	if ( message.startup ) {
+		browser.windows.getCurrent().then( wind => {
+			PORT.postMessage( { "startup" : {} , "windowId" : WINDOW_ID } )
+		} );
+	}
 	if ( message.update ) {
 		let oldElem = document.getElementById( message.update.data.id );
 		let newElem = makeElem( message.update.tab , message.update.data );
@@ -102,7 +98,9 @@ PORT.onMessage.addListener( ( message , sender ) => {
 		setMargin( document.getElementById( message.indent.id ) , message.indent.indent );
 	}
 	if ( message.active ) {
-		document.getElementById( message.active.id ).classList.add( "active" );
+		if ( document.getElementById( message.active.id ) ) {
+			document.getElementById( message.active.id ).classList.add( "active" );
+		}
 		if ( message.active.prevId != undefined ) {
 			document.getElementById( message.active.prevId ).classList.remove( "active" );
 		}
@@ -113,7 +111,25 @@ PORT.onMessage.addListener( ( message , sender ) => {
 		let toElem = TABS_ELEM.children[toIndex];
 		TABS_ELEM.insertBefore( fromElem , toElem );
 	}
+}
+
+// const MOVE_TO = ["moveToTop" , "moveToCenter" , "moveToBottom"];
+// const PORT = browser.runtime.connect( { name : "sidebar" } );
+const TABS_ELEM = document.getElementById( "tabList" );
+const HOVER_ELEM = document.getElementById( "drag" );
+let tabToMove;
+document.getElementById( "newTab" ).addEventListener( "click" , newTab );
+
+let PORT;
+let WINDOW_ID;
+browser.windows.getCurrent().then( w => {
+	WINDOW_ID = w.id;
+	PORT = browser.runtime.connect( { "name" : WINDOW_ID.toString() } );
+	PORT.onMessage.addListener( messageHandler );
 } );
+
+
+
 
 
 
