@@ -208,6 +208,8 @@ function onCreated( tab , startup = false ) {
 	} );
 }
 function messageHandler( message , sender ) {
+	console.log( message );
+	console.log( message.windowId );
 	let win = WINDOWS[message.windowId];
 	let tabsInfo = WINDOWS[message.windowId].tabsInfo;
 	if ( message.startup ) {
