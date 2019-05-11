@@ -1,5 +1,5 @@
 function getTab( elem ) {
-	return elem.classList.contains( "tab" ) ? elem : getTab( elem.parentElement );
+	return elem.classList.contains( "tab" ) ? elem : elem.tagName == "BODY" ? undefined : getTab( elem.parentElement );
 }
 function getTabId( elem ) {
 	return parseInt( getTab( elem ).id );
@@ -16,62 +16,100 @@ function dblclick( e ) {
 function setMargin( elem , indent ) {
 	elem.firstElementChild.style["margin-left"] = String( 10 * indent ) + "px";
 }
-function drag( e ) {
-	if ( e.target.tagName == "DIV" && e.target.id != "newTab" && e.target.id != "tabList" ) {
-		HOVER_ELEM.style.display = "";
-		let x = getTab( e.target ).firstElementChild; // firstElementChild to get the <tbody> rather than <table>
-		x.appendChild( HOVER_ELEM );
-	}
-}
-function mouseup( e ) {
-	if ( e.target.tagName && HOVER_ELEM.style.display != "none" ) { // checkes to see if mouseup occured in the sideBar window and that the mouse was dragged while mousedown'd.
-		let to , type , from = getTabId( tabToMove );
-		if ( e.target.classList.contains( "drag" ) ) { // if mouseup is over a tab
-			to = getTabId( e.target );
-			type = parseInt( e.target.id[4] );
-		}
-		else { // if mouseup is occurs on the newTab button or in the blank space below that.
-			to = parseInt( TABS_ELEM.children[TABS_ELEM.children.length - 2].id );
-			type = 3;
-		}
-		PORT.postMessage( { "move" : { "from" : from , "to" : to , "type" : type } , "windowId" : WINDOW_ID } );
-	}
-	HOVER_ELEM.style.display = "none";
-	document.removeEventListener( "mousemove" , drag );
-	document.removeEventListener( "mouseup" , mouseup );
+function pinTab( e ) {
+	PORT.postMessage( { "pin" : { "id" : e.target.getAttribute( "data-tabId" ) } , "windowId" : WINDOW_ID } );
 }
 function clicked( e ) {
-	e.preventDefault();
 	if ( e.button == 0 ) {
-		tabToMove = getTab( e.target );
 		browser.tabs.update( getTabId( e.target ) , { "active" : true } );
-		document.addEventListener( "mousemove" , drag );
-		document.addEventListener( "mouseup" , mouseup );
 	}
 	if ( e.button == 1 ) {
 		closeTab( e );
 	}
-	// if ( e.button == 2 ) {} // do context menu stuff
 }
-function makeElem( tab , data ) {
+function contextMenu( e ) {
+	e.preventDefault();
+	let elem = getTab( e.target );
+	let pinned = elem.getAttribute( "data-pinned" ) === "true";
+	MENU.innerText = ( pinned ) ? "Unpin tab" : "Pin tab";
+	MENU.setAttribute( "data-tabId" , elem.id );
+	MENU.setAttribute( "data-pinned" , pinned );
+	MENU.style.display = "";
+	MENU.style.top = e.pageY + "px";
+	MENU.style.left = e.pageX + "px";
+}
+function contextMenuOnClick( e ) {
+	MENU.style.display = "none";
+	let id = parseInt( MENU.getAttribute( "data-tabId" ) );
+	let pinned = MENU.getAttribute( "data-pinned" ) === "true";
+	PORT.postMessage( { "pin" : { "id" : id , "pinTab" : !pinned } , "windowId" : WINDOW_ID } )
+	// browser.tabs.update( id , { "pinned" : !pinned } );
+}
+function dragover( e ) {
+	let elem = getTab( e.target );
+	if ( elem != undefined && elem.id != e.dataTransfer.getData( "tab" ) ) {
+		e.preventDefault();
+		let x = e.pageX - elem.offsetLeft;
+		let y = e.pageY - elem.offsetTop;
+		let n = Math.floor( ( y / elem.offsetHeight ) * 3 );
+		HOVER.className = "drag" + n.toString();
+		HOVER.style.display = "";
+	}
+	if ( elem == undefined ) {
+		e.preventDefault();
+		HOVER.className = "drag2";
+		HOVER.style.display = "";
+		TABS_ELEM.lastElementChild.previousElementSibling.firstElementChild.appendChild( HOVER );
+	}
+}
+function drop( e ) {
+	HOVER.style.display = "none"
+	let elem = getTab( e.target );
+	let data = e.dataTransfer.getData( "tab" );
+	let to , type , from = parseInt( data );
+	if ( elem != undefined && elem.id != data ) {
+		let y = e.pageY - elem.offsetTop;
+		to = getTabId( elem );
+		type = ( y <= 4 ) ? 0 : ( y <= 10 ) ? 1 : 2;
+		PORT.postMessage( { "move" : { "from" : from , "to" : to , "type" : type } , "windowId" : WINDOW_ID } );
+	}
+	if ( elem == undefined ) {
+		to = parseInt( TABS_ELEM.children[TABS_ELEM.children.length - 2].id );
+		type = 3;
+		PORT.postMessage( { "move" : { "from" : from , "to" : to , "type" : type } , "windowId" : WINDOW_ID } );
+	}
+}
+function makeElem( index , tab , data ) {
 	let elem = document.importNode( document.getElementById( "tabTemplate" ) , true ).content.firstChild;
-	elem.querySelector( ".title" ).innerText = tab.title;
+	elem.ondragstart = ( e ) => e.dataTransfer.setData( "tab" , e.target.id );
+	elem.ondragenter = ( e ) => getTab( e.target.parentElement ).firstChild.appendChild( HOVER );
+	elem.ondragleave = ( e ) => HOVER.style.display = "none";
+	elem.ondragend = ( e ) => HOVER.style.display = "none";
+	elem.onmousedown = clicked;
+	elem.oncontextmenu = contextMenu;
 	elem.id = tab.id;
 	// elem.querySelector( ".close" ).addEventListener( "click" , closeTab ); // may want to reinstate the "x" to close tabs.
-	setMargin( elem , data.indent );
-	elem.addEventListener( "mousedown" , clicked );
-	if ( tab.favIconUrl ) { elem.querySelector( "IMG" ).src = tab.favIconUrl }
-	if ( tab.active ) { elem.classList.add( "active" ) }
-
-	if ( data.hide ) { elem.style.display = "none" }
-	if ( data.hasChildren ) {
-		elem.querySelector( ".triangle" ).classList.add( data.hideChildren ? "right" : "down" );
-		elem.addEventListener( "dblclick" , dblclick );
-		elem.querySelector( ".expand" ).addEventListener( "mousedown" , dblclick );
-	}
-
-	return elem;
+	TABS_ELEM.insertBefore( elem , TABS_ELEM.children[index] );
+	update( tab , data );
 }
+function update( tab , data ) {
+	let elem = document.getElementById( data.id );
+	setMargin( elem , data.indent );
+	if ( elem.querySelector( ".title" ).innerText != tab.title ) {
+		elem.querySelector( ".title" ).innerText = tab.title;
+	}
+	if ( tab.favIconUrl ) { elem.querySelector( "IMG" ).src = tab.favIconUrl }
+	elem.classList.toggle( "active" , tab.active );
+	elem.style.display = ( data.hide ) ? "none" : "";
+	elem.querySelector( ".triangle" ).className = ( !data.hasChildren  ) ? "triangle" :
+	                                              (  data.hideChildren ) ? "triangle right" : "triangle down";
+	elem.ondblclick = ( data.hasChildren ) ? dblclick : undefined;
+	elem.querySelector( ".expand" ).onmousedown = ( data.hasChildren ) ? dblclick : undefined;
+	let childCount = elem.querySelector( ".childCount" );
+	childCount.innerText = ( data.hasChildren && data.hideChildren ) ? "(" + data.childCount + ")" : "";
+	elem.setAttribute( "data-pinned" , tab.pinned );
+}
+
 function messageHandler( message , sender ) {
 	if ( message.startup ) {
 		browser.windows.getCurrent().then( wind => {
@@ -79,14 +117,10 @@ function messageHandler( message , sender ) {
 		} );
 	}
 	if ( message.update ) {
-		let oldElem = document.getElementById( message.update.data.id );
-		let newElem = makeElem( message.update.tab , message.update.data );
-		if ( oldElem ) oldElem.replaceWith( newElem ); // sometimes oldElem doesn't exist yet because message.create hasn't finished creating oldElem yet. It doesn't matter though.
+		update( message.update.tab , message.update.data );
 	}
 	if ( message.create ) {
-		let toElem = TABS_ELEM.children[message.create.index];
-		let fromElem = makeElem( message.create.tab , message.create.data );
-		TABS_ELEM.insertBefore( fromElem , toElem );
+		makeElem( message.create.index , message.create.tab , message.create.data );
 	}
 	if ( message.remove ) {
 		document.getElementById( message.remove.id ).remove();
@@ -95,7 +129,9 @@ function messageHandler( message , sender ) {
 		document.getElementById( message.hide.id ).style.display = message.hide.hide ? "none" : "";
 	}
 	if ( message.indent ) {
-		setMargin( document.getElementById( message.indent.id ) , message.indent.indent );
+		if ( document.getElementById( message.indent.id ) ) {
+			setMargin( document.getElementById( message.indent.id ) , message.indent.indent );
+		}
 	}
 	if ( message.active ) {
 		if ( document.getElementById( message.active.id ) ) {
@@ -113,13 +149,14 @@ function messageHandler( message , sender ) {
 	}
 }
 
-// const MOVE_TO = ["moveToTop" , "moveToCenter" , "moveToBottom"];
-// const PORT = browser.runtime.connect( { name : "sidebar" } );
 const TABS_ELEM = document.getElementById( "tabList" );
-const HOVER_ELEM = document.getElementById( "drag" );
-let tabToMove;
-document.getElementById( "newTab" ).addEventListener( "click" , newTab );
-
+TABS_ELEM.ondrop = drop;
+TABS_ELEM.ondragover = dragover;
+TABS_ELEM.onclick = e => MENU.style.display = "none";
+const HOVER = document.getElementById( "drag" );
+const MENU = document.getElementById( "menu" );
+MENU.onclick = contextMenuOnClick;
+document.getElementById( "newTab" ).onclick = newTab;
 let PORT;
 let WINDOW_ID;
 browser.windows.getCurrent().then( w => {
@@ -127,9 +164,6 @@ browser.windows.getCurrent().then( w => {
 	PORT = browser.runtime.connect( { "name" : WINDOW_ID.toString() } );
 	PORT.onMessage.addListener( messageHandler );
 } );
-
-
-
 
 
 

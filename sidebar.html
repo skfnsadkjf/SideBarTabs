@@ -5,13 +5,43 @@
 	<link rel="stylesheet" href="sidebar.css"/>
 	<script src="sidebar.js" defer></script>
 
-	<template id="tabTemplate"><div class="tab"><div class="tabMargin"><div class="tabContent"><div class="expand"><div class="triangle"></div></div><div class="favicon"><img></img></div><div class="title"></div></div></div></div></template>
+	<template id="tabTemplate"><div class="tab" draggable="true"><div class="tabMargin"><div class="tabContent"><div class="expand"><div class="triangle" draggable="false"></div></div><div class="favicon"><img draggable="false"></img></div><div class="title" draggable="false"></div><div class="childCount" draggable="false"></div></div></div></div></template>
 </head>
 <body>
 	<div id="tabList"><div id="newTab"><img src="icons/close.png"></img></div></div>
-	<div id="drag" style="display:none;">
-		<div id="drag0" class="drag"></div>
-		<div id="drag1" class="drag"></div>
-		<div id="drag2" class="drag"></div>
-	</div>
+	<div id="drag" style="display:none"></div>
+
+	<div id="menu" style="display:none;">Pin or unpin tab</div>
+
+
 </body>
+
+
+
+
+
+<!--
+
+	<template id="tabTemplate">
+		<div class="tab" draggable="true">
+			<div class="tabMargin">
+				<div class="tabContent">
+					<div class="expand">
+						<div class="triangle" draggable="false">
+
+						</div>
+					</div>
+					<div class="favicon">
+						<img draggable="false">
+
+						</img>
+					</div>
+					<div class="title" draggable="false">
+
+					</div>
+					<div class="hiddenCount" draggable="false"></div>
+				</div>
+			</div>
+		</div>
+	</template>
+ -->

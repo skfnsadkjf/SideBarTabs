@@ -1,15 +1,17 @@
 :root {
 	--tabHeight: 16px;
 }
-body {
-	height: 100%;
+#tabList {
+	height: 100vh;
 	background-color: #444444;
 	border-left: 1px solid black;
 }
 .tabMargin { background-color: #e0e0e0; }
 .tabContent>*{ display: inline-block; }
 .tab:hover>div{ background-color: #d0d0d0; }
+.tab:hover .childCount{ background-color: #d0d0d0; }
 .tab.active>div{ background-color: #a0a0d0; }
+.tab.active .childCount{ background-color: #a0a0d0; }
 .tab {
 	overflow: hidden;
 	white-space: nowrap;
@@ -49,26 +51,31 @@ img {
 	border-bottom: 3px solid transparent;
 }
 
-
-
-#drag {
+.childCount {
 	position: absolute;
-	top: 0px;
-	width: 100%;
+	right: 0px;
+	background-color: #e0e0e0;
+	padding: 0px 3px 0px 5px;
 }
-#drag0 { height: 4px; }
-/*#drag0 { border-top:3px solid magenta; }*/
-#drag0:hover { border-top:3px solid magenta; }
-#drag1 { height: 8px; }
-/*#drag1 { border:2px solid black; }*/
-#drag1:hover { border:2px solid black; }
-#drag2 { height: 4px; }
-/*#drag2 { border-bottom:3px solid purple; }*/
-#drag2:hover { border-bottom:3px solid purple; }
+
+#drag { position: absolute; top: 0px; width: 100%; height: 16px; }
+.drag0 { border-top:3px solid magenta; }
+.drag1 { border: 2px solid black; }
+.drag2 { border-bottom:3px solid purple; }
 
 
 
 
+
+
+#menu {
+	position: absolute;
+	padding: 2px;
+	border: 1px solid black;
+	background-color: #e0e0e0;
+	z-index: 10;
+}
+#menu:hover { background-color: lightskyblue; }
 
 
 
