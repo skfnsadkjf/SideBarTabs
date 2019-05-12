@@ -6,6 +6,8 @@
 	background-color: #444444;
 	border-left: 1px solid black;
 }
+/*.tab { margin-bottom: 1px; }*/
+.tab { padding-bottom: 1px; }
 .tabMargin { background-color: #e0e0e0; }
 .tabContent>*{ display: inline-block; }
 .tab:hover>div{ background-color: #d0d0d0; }
@@ -39,13 +41,18 @@ img {
 	display: block;
 }
 
-.triangle { width: 0px; height: 0px; margin: 3px 0px 3px 3px; }
+.triangle {
+	width: 0px;
+	height: 0px;
+	margin: 3px 0px 3px 3px;
+}
 .triangle.down {
 	border-left: 3px solid transparent;
 	border-right: 3px solid transparent;
 	border-top: 5px solid black;
 }
 .triangle.right {
+	margin-left: 4px; /*Without a bit extra margin this trangle appears to be too far left*/
 	border-top: 3px solid transparent;
 	border-left: 5px solid black;
 	border-bottom: 3px solid transparent;
@@ -53,6 +60,7 @@ img {
 
 .childCount {
 	position: absolute;
+	font-weight: bold;
 	right: 0px;
 	background-color: #e0e0e0;
 	padding: 0px 3px 0px 5px;
@@ -87,3 +95,5 @@ img {
 	right: 0px;
 	width: 19px;
 }*/
+
+

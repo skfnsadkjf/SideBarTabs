@@ -341,20 +341,32 @@ startup();
 
 
 
+//====================== changed =======================
 
+// improved favIcons
 
+// clicking tree twisties shouldn't change active tab.
 
 //================== needed changes ====================
 
+
+//================== ideal changes =====================
+
+// add close tab button. appears on hover of elem, changes on hover of itself.
+
+// change the tab drag hover appearance.
+
+// maybe 18 high tabs instead of 16.
 
 //================= possible changes ===================
 
 // undo close tab:
 	// maybe only return children into place if they're still a descendant of parent.
 
-// on right click open context menu
-
 // do things with options.
+
+// can take elems children by inserting as next sibling when elem has children.
+	// not sure if this is a bug or a feature.
 
 // maybe set successor of a new non-child tab to be the previously acitve tab, only until active tab changes.
 	// probably a bad call.
@@ -364,7 +376,11 @@ startup();
 		// I'm not sure what the problem was, but I can't reproduce it.
 	// I could just restart the addon after this happens, or reset the window's tabsInfo.
 
+//====================== notes =========================
 
+// Can't set a custom favIcon for pages without favIcons because:
+	// all new tabs briefly have the url "about:blank" and status "complete".
+	// all tabs have a brief period while loading where they have both status "complete" and favIconUrl undefined.
 
 
 

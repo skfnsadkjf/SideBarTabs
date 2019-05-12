@@ -11,7 +11,9 @@ function newTab( e ) {
 	if ( e.button == 0 ) browser.tabs.create( {} );
 }
 function dblclick( e ) {
-	PORT.postMessage( { "hideChildren" : { "id" : getTabId( e.target ) } , "windowId" : WINDOW_ID } );
+	if ( !e.target.className.match( /triangle|expand/ ) ) {
+		PORT.postMessage( { "hideChildren" : { "id" : getTabId( e.target ) } , "windowId" : WINDOW_ID } );
+	}
 }
 function setMargin( elem , indent ) {
 	elem.firstElementChild.style["margin-left"] = String( 10 * indent ) + "px";
@@ -21,7 +23,12 @@ function pinTab( e ) {
 }
 function clicked( e ) {
 	if ( e.button == 0 ) {
-		browser.tabs.update( getTabId( e.target ) , { "active" : true } );
+		if ( e.target.className.match( /triangle|expand/ ) ) {
+			PORT.postMessage( { "hideChildren" : { "id" : getTabId( e.target ) } , "windowId" : WINDOW_ID } );
+		}
+		else {
+			browser.tabs.update( getTabId( e.target ) , { "active" : true } );
+		}
 	}
 	if ( e.button == 1 ) {
 		closeTab( e );
@@ -94,19 +101,23 @@ function makeElem( index , tab , data ) {
 }
 function update( tab , data ) {
 	let elem = document.getElementById( data.id );
+	let img = elem.querySelector( "IMG" );
 	setMargin( elem , data.indent );
 	if ( elem.querySelector( ".title" ).innerText != tab.title ) {
 		elem.querySelector( ".title" ).innerText = tab.title;
 	}
-	if ( tab.favIconUrl ) { elem.querySelector( "IMG" ).src = tab.favIconUrl }
+	if ( tab.status == "complete" || !img.src.endsWith( "icons/loading.png" ) ) { // prevents reseting animated image while loading.
+		img.src = tab.url == "about:newtab"   ? "" :
+	              tab.status != "complete"    ? "icons/loading.png" :
+	              tab.favIconUrl == undefined ? "" :
+	                                            tab.favIconUrl;
+	}
 	elem.classList.toggle( "active" , tab.active );
 	elem.style.display = ( data.hide ) ? "none" : "";
 	elem.querySelector( ".triangle" ).className = ( !data.hasChildren  ) ? "triangle" :
 	                                              (  data.hideChildren ) ? "triangle right" : "triangle down";
 	elem.ondblclick = ( data.hasChildren ) ? dblclick : undefined;
-	elem.querySelector( ".expand" ).onmousedown = ( data.hasChildren ) ? dblclick : undefined;
-	let childCount = elem.querySelector( ".childCount" );
-	childCount.innerText = ( data.hasChildren && data.hideChildren ) ? "(" + data.childCount + ")" : "";
+	elem.querySelector( ".childCount" ).innerText = ( data.hasChildren && data.hideChildren ) ? "(" + data.childCount + ")" : "";
 	elem.setAttribute( "data-pinned" , tab.pinned );
 }
 
