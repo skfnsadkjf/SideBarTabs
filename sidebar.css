@@ -3,7 +3,7 @@
 }
 #tabList {
 	height: 100vh;
-	background-color: #444444;
+	background-color: #9f9f9f;
 	border-left: 1px solid black;
 }
 /*.tab { margin-bottom: 1px; }*/
@@ -23,15 +23,15 @@
 	table-layout: fixed;
 	border-collapse: collapse;
 }
-.expand { width: 13px; }
 .favicon { width: 22px; }
-img {
+.favicon>img {
 	height: 16px;
 	vertical-align: bottom;
 }
 
 #newTab:hover { background-color: #d0d0d0; }
 #newTab {
+	/*display: none;*/
 	height: 16px; width: 100%;
 	background-color: #e0e0e0;
 }
@@ -41,6 +41,7 @@ img {
 	display: block;
 }
 
+.expand { width: 13px; }
 .triangle {
 	width: 0px;
 	height: 0px;
@@ -71,8 +72,9 @@ img {
 .drag1 { border: 2px solid black; }
 .drag2 { border-bottom:3px solid purple; }
 
+.tab:hover .childCount {
 
-
+}
 
 
 

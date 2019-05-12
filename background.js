@@ -34,7 +34,6 @@ function getChildren( parent , win ) { // only direct children. Not all descenda
 
 
 
-
 function sendMessage( message , win ) {
 	if ( win.port ) win.port.postMessage( message );
 }
@@ -118,14 +117,13 @@ function updateIndents( slice , toIndent , type , win ) {
 function make( id , win , tab , startup = false ) {
 	browser.sessions.setTabValue( tab.id , "oldId" , tab.id );
 	// let data = closedTabs[id];
-	let data = startup ? undefined : closedTabs[id];
+	let data = ( startup ) ? undefined : closedTabs[id];
 	let nextSibling = ( data ) ? getIndex( data.nextSiblingId , win ) : -1;
 	let prevSibling = ( data ) ? getIndex( data.prevSiblingId , win ) : -1;
 	let parent = ( startup              ) ? -1 :
 	             ( tab.openerTabId >= 0 ) ? getIndex( tab.openerTabId , win ) :
 	             ( data != undefined    ) ? findLast( win.tabsInfo , v => data.ancestorIds.includes( v.id ) ) :
 	                                        -1;
-	// let index = ( startup              ) ? win.tabsInfo.length :
 	let index = ( startup              ) ? startup.index :
 	            ( tab.openerTabId >= 0 ) ? parent + 1 :
 	            ( nextSibling     >= 0 ) ? nextSibling:
@@ -157,8 +155,11 @@ function make( id , win , tab , startup = false ) {
 		"childCount" : ( startup ) ? startup.childCount : 0 ,
 		"successor" : -1
 	};
-	win.tabsInfo.splice( tab.index , 0 , tabInfo );
-	sendMessage( { "create" : { "tab" : tab , "data" : tabInfo , "index" : tab.index } } , win );
+	let tabIndex = Math.min( tab.index , win.tabsInfo.length ); // used for bug when tab.index is higher than window.tabs.length.
+	win.tabsInfo.splice( tabIndex , 0 , tabInfo );
+	// win.tabsInfo.splice( tab.index , 0 , tabInfo );
+	sendMessage( { "create" : { "tab" : tab , "data" : tabInfo , "index" : tabIndex } } , win );
+	// sendMessage( { "create" : { "tab" : tab , "data" : tabInfo , "index" : tab.index } } , win );
 
 	browser.tabs.move( ids , { "index" : index } ).then( v => {
 		if ( parent >= 0 ) {
@@ -178,9 +179,6 @@ function make( id , win , tab , startup = false ) {
 
 
 
-
-
-
 function onActivated( activeInfo ) {
 	let win = WINDOWS[activeInfo.windowId];
 	let ancestors = getAncestors( getIndex( activeInfo.tabId , win ) , win );
@@ -197,11 +195,11 @@ function onUpdated( tabId , changeInfo , tab ) {
 	}
 }
 function onMoved( tabId , moveInfo ) {
-	// console.log( "moved tabId = " + tabId );
 	let win = WINDOWS[moveInfo.windowId];
-	let from = win.tabsInfo.splice( moveInfo.fromIndex , 1 )[0];
+	let fromIndex = Math.min( moveInfo.fromIndex , win.tabsInfo.length - 1 ); // used for bug when tab.index is higher than window.tabs.length.
+	let from = win.tabsInfo.splice( fromIndex , 1 )[0];
 	win.tabsInfo.splice( moveInfo.toIndex , 0 , from );
-	sendMessage( { "move" : { "to" : moveInfo.toIndex , "from" : moveInfo.fromIndex } } , win );
+	sendMessage( { "move" : { "to" : moveInfo.toIndex , "from" : fromIndex } } , win );
 	updateParents( win );
 	setSuccessors( win );
 	save();
@@ -341,18 +339,15 @@ startup();
 
 
 
-//====================== changed =======================
-
-// improved favIcons
-
-// clicking tree twisties shouldn't change active tab.
 
 //================== needed changes ====================
 
-
-//================== ideal changes =====================
+// bug: restoring closed tabs, possible to restore to an index past tabsInfo.length
+	// tab.index property will be too high, thus breaking code.
 
 // add close tab button. appears on hover of elem, changes on hover of itself.
+
+//================== ideal changes =====================
 
 // change the tab drag hover appearance.
 
@@ -382,8 +377,19 @@ startup();
 	// all new tabs briefly have the url "about:blank" and status "complete".
 	// all tabs have a brief period while loading where they have both status "complete" and favIconUrl undefined.
 
+//====================== tests =========================
 
-
+// move tab
+// move tab to new parent
+// move tab with children
+// close tab
+// close tab with children
+// close tab with parent
+// create tab with ctrl-t/search
+// create tab with middle click
+// restore closed tab
+// restore closed tab that had children
+// restore closed tab whose old index is greater than window.tabs.length
 
 
 

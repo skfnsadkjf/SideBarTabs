@@ -101,11 +101,11 @@ function makeElem( index , tab , data ) {
 }
 function update( tab , data ) {
 	let elem = document.getElementById( data.id );
-	let img = elem.querySelector( "IMG" );
 	setMargin( elem , data.indent );
 	if ( elem.querySelector( ".title" ).innerText != tab.title ) {
 		elem.querySelector( ".title" ).innerText = tab.title;
 	}
+	let img = elem.querySelector( ".favicon" ).firstElementChild;
 	if ( tab.status == "complete" || !img.src.endsWith( "icons/loading.png" ) ) { // prevents reseting animated image while loading.
 		img.src = tab.url == "about:newtab"   ? "" :
 	              tab.status != "complete"    ? "icons/loading.png" :
@@ -119,6 +119,7 @@ function update( tab , data ) {
 	elem.ondblclick = ( data.hasChildren ) ? dblclick : undefined;
 	elem.querySelector( ".childCount" ).innerText = ( data.hasChildren && data.hideChildren ) ? "(" + data.childCount + ")" : "";
 	elem.setAttribute( "data-pinned" , tab.pinned );
+	if ( tab.index > TABS_ELEM.children.length - 1 ) { console.log( tab.index ) }
 }
 
 function messageHandler( message , sender ) {
