@@ -321,7 +321,7 @@ function startup() {
 
 
 let startupCompleted = false;
-let startupPorts = [] // list of ports awaiting startup()'s completion. Only used once after startup.
+let startupPorts = []; // list of ports awaiting startup()'s completion. Only used once after startup.
 let WINDOWS = {}; // = { "id" : { "port" : port , "tabsInfo" : TAB_LIST } , "id" : { ... } , ... }
 let closedTabs = {};
 let detachedTabsInfo = []; // temporary storage because sessions api doesn't retain data for tabs moved to other windows.
@@ -341,9 +341,6 @@ startup();
 
 
 //================== needed changes ====================
-
-// bug: restoring closed tabs, possible to restore to an index past tabsInfo.length
-	// tab.index property will be too high, thus breaking code.
 
 // add close tab button. appears on hover of elem, changes on hover of itself.
 

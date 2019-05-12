@@ -8,11 +8,16 @@ function closeTab( e ) {
 	browser.tabs.remove( getTabId( e.target ) );
 }
 function newTab( e ) {
-	if ( e.button == 0 ) browser.tabs.create( {} );
+	if ( e.button == 0 ) {
+		browser.tabs.create( {} );
+	}
+}
+function hideChildren( e ) {
+	PORT.postMessage( { "hideChildren" : { "id" : getTabId( e.target ) } , "windowId" : WINDOW_ID } );
 }
 function dblclick( e ) {
 	if ( !e.target.className.match( /triangle|expand/ ) ) {
-		PORT.postMessage( { "hideChildren" : { "id" : getTabId( e.target ) } , "windowId" : WINDOW_ID } );
+		hideChildren( e );
 	}
 }
 function setMargin( elem , indent ) {
@@ -24,7 +29,10 @@ function pinTab( e ) {
 function clicked( e ) {
 	if ( e.button == 0 ) {
 		if ( e.target.className.match( /triangle|expand/ ) ) {
-			PORT.postMessage( { "hideChildren" : { "id" : getTabId( e.target ) } , "windowId" : WINDOW_ID } );
+			hideChildren( e );
+		}
+		else if ( e.target.className == "childCount" ) {
+			closeTab( e );
 		}
 		else {
 			browser.tabs.update( getTabId( e.target ) , { "active" : true } );
@@ -89,7 +97,7 @@ function drop( e ) {
 function makeElem( index , tab , data ) {
 	let elem = document.importNode( document.getElementById( "tabTemplate" ) , true ).content.firstChild;
 	elem.ondragstart = ( e ) => e.dataTransfer.setData( "tab" , e.target.id );
-	elem.ondragenter = ( e ) => getTab( e.target.parentElement ).firstChild.appendChild( HOVER );
+	elem.ondragenter = ( e ) => getTab( e.target.parentElement ).firstElementChild.prepend( HOVER );
 	elem.ondragleave = ( e ) => HOVER.style.display = "none";
 	elem.ondragend = ( e ) => HOVER.style.display = "none";
 	elem.onmousedown = clicked;
@@ -119,7 +127,6 @@ function update( tab , data ) {
 	elem.ondblclick = ( data.hasChildren ) ? dblclick : undefined;
 	elem.querySelector( ".childCount" ).innerText = ( data.hasChildren && data.hideChildren ) ? "(" + data.childCount + ")" : "";
 	elem.setAttribute( "data-pinned" , tab.pinned );
-	if ( tab.index > TABS_ELEM.children.length - 1 ) { console.log( tab.index ) }
 }
 
 function messageHandler( message , sender ) {
