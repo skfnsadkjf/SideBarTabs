@@ -58,7 +58,6 @@ function contextMenuOnClick( e ) {
 	let id = parseInt( MENU.getAttribute( "data-tabId" ) );
 	let pinned = MENU.getAttribute( "data-pinned" ) === "true";
 	PORT.postMessage( { "pin" : { "id" : id , "pinTab" : !pinned } , "windowId" : WINDOW_ID } )
-	// browser.tabs.update( id , { "pinned" : !pinned } );
 }
 function dragover( e ) {
 	let elem = getTab( e.target );
@@ -74,7 +73,7 @@ function dragover( e ) {
 		e.preventDefault();
 		HOVER.className = "drag2";
 		HOVER.style.display = "";
-		TABS_ELEM.lastElementChild.previousElementSibling.firstElementChild.appendChild( HOVER );
+		TABS_ELEM.lastElementChild.previousElementSibling.firstElementChild.prepend( HOVER );
 	}
 }
 function drop( e ) {

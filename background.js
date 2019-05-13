@@ -339,18 +339,21 @@ startup();
 
 
 
+//======= fixed but uncommited/uploaded to mdn =========
+
+// bug: dragging below last tab still has visual bug where the black borders
 
 //================== needed changes ====================
 
-// add close tab button. appears on hover of elem, changes on hover of itself.
+// need to scroll sidebar such that activeTab is always on screen.
 
 //================== ideal changes =====================
 
-// change the tab drag hover appearance.
-
-// maybe 18 high tabs instead of 16.
+// close tree/children context menu options.
 
 //================= possible changes ===================
+
+// maybe 18 high tabs instead of 16.
 
 // undo close tab:
 	// maybe only return children into place if they're still a descendant of parent.
@@ -387,7 +390,7 @@ startup();
 // restore closed tab
 // restore closed tab that had children
 // restore closed tab whose old index is greater than window.tabs.length
-
+// think up some visual tests.
 
 
 
