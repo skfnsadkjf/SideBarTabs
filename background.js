@@ -223,7 +223,7 @@ function onAttached( tabId , attachInfo ) {
 	browser.tabs.get( tabId ).then( tab => {
 		let data = detachedTabsInfo.shift();
 		data.index = attachInfo.newPosition;
-		make( tabId , WINDOWS[attachInfo.newWindowId] , tab , data )
+		make( tabId , WINDOWS[attachInfo.newWindowId] , tab , data );
 	} );
 }
 function onDetached( tabId , detachInfo ) {
@@ -275,6 +275,7 @@ function messageHandler( message , sender ) {
 				for ( let i = 0; i < moveTabs.length; i++ ) {
 					browser.tabs.move( moveTabs[i] , { "windowId" : message.windowId , "index" : moveTo + i } );
 				}
+				browser.tabs.update( moveTabs[0] , { "active" : true } );
 			}
 		} );
 	}
@@ -344,15 +345,14 @@ startup();
 
 //=========== fixed but not uploaded to mdn ============
 
-// bug: dragging below last tab still has visual bug where the black borders
-
-// need to scroll sidebar such that activeTab is always on screen.
-
 //=============== fixed but uncommited =================
 
+// onAttach needs to activate tab.
 
 //================== needed changes ====================
 
+
+//======================= bugs =========================
 
 // can still append tabs past newTab elem sometimes.
 	// not sure how to reproduce, but it defs happened.
