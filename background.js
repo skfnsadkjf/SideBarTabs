@@ -339,13 +339,23 @@ startup();
 
 
 
-//======= fixed but uncommited/uploaded to mdn =========
+
+
+
+//=========== fixed but not uploaded to mdn ============
 
 // bug: dragging below last tab still has visual bug where the black borders
 
+// need to scroll sidebar such that activeTab is always on screen.
+
+//=============== fixed but uncommited =================
+
+
 //================== needed changes ====================
 
-// need to scroll sidebar such that activeTab is always on screen.
+
+// can still append tabs past newTab elem sometimes.
+	// not sure how to reproduce, but it defs happened.
 
 //================== ideal changes =====================
 

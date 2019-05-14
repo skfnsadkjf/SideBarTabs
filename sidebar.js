@@ -126,6 +126,7 @@ function update( tab , data ) {
 	elem.ondblclick = ( data.hasChildren ) ? dblclick : undefined;
 	elem.querySelector( ".childCount" ).innerText = ( data.hasChildren && data.hideChildren ) ? "(" + data.childCount + ")" : "";
 	elem.setAttribute( "data-pinned" , tab.pinned );
+	document.getElementById( data.id ).scrollIntoView( { "block" : "nearest" } );
 }
 
 function messageHandler( message , sender ) {
