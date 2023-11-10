@@ -1,27 +1,25 @@
-function getTab( elem ) {
-	return elem.classList.contains( "tab" ) ? elem : elem.tagName == "BODY" ? undefined : getTab( elem.parentElement );
+function closeTab( id ) {
+	browser.tabs.remove( id );
 }
-function getTabId( elem ) {
-	return parseInt( getTab( elem ).id );
+function hideChildren( id ) {
+	PORT.postMessage( { "hideChildren" : { "id" : id } , "windowId" : WINDOW_ID } );
 }
-function closeTab( e ) {
-	browser.tabs.remove( getTabId( e.target ) );
+function setMargin( elem , indent ) {
+	elem.querySelector( ".tabContent" ).style["margin-left"] = String( 10 * indent ) + "px";
 }
-function newTab( e ) {
-	if ( e.button == 0 ) {
-		browser.tabs.create( {} );
-	}
-}
-function hideChildren( e ) {
-	PORT.postMessage( { "hideChildren" : { "id" : getTabId( e.target ) } , "windowId" : WINDOW_ID } );
+const moveTab = ( elem , index ) => {
+	const pinned = elem.getAttribute( "data-pinned" ) == "true";
+	const pinnedTabs = document.querySelector( "#pinnedTabs" );
+	const notPinnedTabs = document.querySelector( "#notPinnedTabs" );
+	const list = ( pinned ) ? pinnedTabs : notPinnedTabs;
+	const indexTo = index - ( pinned ? 0 : ( pinnedTabs.children.length - 1 ) );
+	const elemTo = ( indexTo < list.children.length ) ? list.children[indexTo] : null;
+	list.insertBefore( elem , elemTo );
 }
 function dblclick( e ) {
 	if ( !e.target.className.match( /triangle|expand/ ) ) {
-		hideChildren( e );
+		hideChildren( parseInt( e.currentTarget.id ) );
 	}
-}
-function setMargin( elem , indent ) {
-	elem.firstElementChild.style["margin-left"] = String( 10 * indent ) + "px";
 }
 function pinTab( e ) {
 	PORT.postMessage( { "pin" : { "id" : e.target.getAttribute( "data-tabId" ) } , "windowId" : WINDOW_ID } );
@@ -29,109 +27,101 @@ function pinTab( e ) {
 function clicked( e ) {
 	if ( e.button == 0 ) {
 		if ( e.target.className.match( /triangle|expand/ ) ) {
-			hideChildren( e );
+			hideChildren( parseInt( e.currentTarget.id ) );
 		}
 		else if ( e.target.className == "childCount" ) {
-			closeTab( e );
+			closeTab( parseInt( e.currentTarget.id ) );
 		}
 		else {
-			browser.tabs.update( getTabId( e.target ) , { "active" : true } );
+			browser.tabs.update( parseInt( e.currentTarget.id ) , { "active" : true } );
 		}
 	}
 	if ( e.button == 1 ) {
-		closeTab( e );
+		e.preventDefault();
+		closeTab( parseInt( e.currentTarget.id ) );
 	}
 }
 function contextMenu( e ) {
 	e.preventDefault();
-	let elem = getTab( e.target );
-	let pinned = elem.getAttribute( "data-pinned" ) === "true";
-	MENU.innerText = ( pinned ) ? "Unpin tab" : "Pin tab";
-	MENU.setAttribute( "data-tabId" , elem.id );
-	MENU.setAttribute( "data-pinned" , pinned );
-	MENU.style.display = "";
-	MENU.style.top = e.pageY + "px";
-	MENU.style.left = e.pageX + "px";
+	const menu = document.querySelector( "#menu" );
+	const pinned = e.currentTarget.getAttribute( "data-pinned" ) === "true";
+	menu.innerText = ( pinned ) ? "Unpin tab" : "Pin tab";
+	menu.setAttribute( "data-tabId" , e.currentTarget.id );
+	menu.setAttribute( "data-pinned" , pinned );
+	menu.style.display = "";
+	menu.style.top = e.pageY + "px";
+	menu.style.left = e.pageX + "px";
+	menu.focus( { "focusVisible": false } );
 }
 function contextMenuOnClick( e ) {
-	MENU.style.display = "none";
-	let id = parseInt( MENU.getAttribute( "data-tabId" ) );
-	let pinned = MENU.getAttribute( "data-pinned" ) === "true";
+	const menu = document.querySelector( "#menu" );
+	const id = parseInt( menu.getAttribute( "data-tabId" ) );
+	const pinned = menu.getAttribute( "data-pinned" ) === "true";
+	menu.blur();
 	PORT.postMessage( { "pin" : { "id" : id , "pinTab" : !pinned } , "windowId" : WINDOW_ID } )
 }
 function dragover( e ) {
-	let elem = getTab( e.target );
-	if ( elem != undefined && elem.id != e.dataTransfer.getData( "tab" ) ) {
+	const elem = e.target.closest( ".tab" );
+	const dragElem = document.querySelector( "#drag" );
+	if ( elem?.id != e.dataTransfer.getData( "tabId" ) ) {
 		e.preventDefault();
-		let x = e.pageX - elem.offsetLeft;
-		let y = e.pageY - elem.offsetTop;
-		let n = Math.floor( ( y / elem.offsetHeight ) * 3 );
-		HOVER.className = "drag" + n.toString();
-		HOVER.style.display = "";
-	}
-	if ( elem == undefined ) {
-		e.preventDefault();
-		HOVER.className = "drag2";
-		HOVER.style.display = "";
-		TABS_ELEM.lastElementChild.previousElementSibling.firstElementChild.prepend( HOVER );
+		dragElem.style.display = "";
+		if ( elem ) {
+			const y = e.pageY - elem.offsetTop;
+			dragElem.className = ( y <= 4 ) ? "drag0" : ( y <= 10 ) ? "drag1" : "drag2";
+		}
+		else {
+			dragElem.className = "drag2";
+			[...document.querySelectorAll( ".tab" )].at( -1 ).prepend( dragElem );
+		}
 	}
 }
 function drop( e ) {
-	HOVER.style.display = "none"
-	let elem = getTab( e.target );
-	let data = e.dataTransfer.getData( "tab" );
-	let to , type , from = parseInt( data );
-	if ( elem != undefined && elem.id != data ) {
-		let y = e.pageY - elem.offsetTop;
-		to = getTabId( elem );
-		type = ( y <= 4 ) ? 0 : ( y <= 10 ) ? 1 : 2;
-		PORT.postMessage( { "move" : { "from" : from , "to" : to , "type" : type } , "windowId" : WINDOW_ID } );
-	}
-	if ( elem == undefined ) {
-		to = parseInt( TABS_ELEM.children[TABS_ELEM.children.length - 2].id );
-		type = 3;
-		PORT.postMessage( { "move" : { "from" : from , "to" : to , "type" : type } , "windowId" : WINDOW_ID } );
-	}
-}
-function makeElem( index , tab , data ) {
-	let elem = document.importNode( document.getElementById( "tabTemplate" ) , true ).content.firstChild;
-	elem.ondragstart = ( e ) => e.dataTransfer.setData( "tab" , e.target.id );
-	elem.ondragenter = ( e ) => getTab( e.target.parentElement ).firstElementChild.prepend( HOVER );
-	elem.ondragleave = ( e ) => HOVER.style.display = "none";
-	elem.ondragend = ( e ) => HOVER.style.display = "none";
-	elem.onmousedown = clicked;
-	elem.oncontextmenu = contextMenu;
-	elem.id = tab.id;
-	// elem.querySelector( ".close" ).addEventListener( "click" , closeTab ); // may want to reinstate the "x" to close tabs.
-	TABS_ELEM.insertBefore( elem , TABS_ELEM.children[index] );
-	update( tab , data );
+	document.querySelector( "#drag" ).style.display = "none";
+	const elem = e.target.closest( ".tab" );
+	const id = e.dataTransfer.getData( "tabId" );
+	const from = parseInt( id );
+	const to = ( elem ) ? parseInt( elem.id ) : parseInt( [...document.querySelectorAll( ".tab" )].at( -1 ).id );
+	const y = ( elem ) ? e.pageY - elem.offsetTop : undefined;
+	const type = ( y <= 4 ) ? 0 : ( y <= 10 ) ? 1 : ( y != undefined ) ? 2 : 3;
+	PORT.postMessage( { "move" : { "from" : from , "to" : to , "type" : type } , "windowId" : WINDOW_ID } );
 }
 function update( tab , data ) {
-	let elem = document.getElementById( data.id );
+	const elem = document.getElementById( data.id );
+	const img = elem.querySelector( ".favicon" ).firstElementChild;
+	const favIconUrl = ( tab.favIconUrl && tab.url != "about:newtab" ) ? tab.favIconUrl : "";
+	if ( tab.status == "complete" || !img.src.endsWith( "icons/loading.png" ) ) { // if required to prevent reseting animated loading image.
+		img.src = ( tab.status == "complete" ) ? favIconUrl : "icons/loading.png";
+	}
 	setMargin( elem , data.indent );
-	if ( elem.querySelector( ".title" ).innerText != tab.title ) {
-		elem.querySelector( ".title" ).innerText = tab.title;
-	}
-	let img = elem.querySelector( ".favicon" ).firstElementChild;
-	if ( tab.status == "complete" || !img.src.endsWith( "icons/loading.png" ) ) { // prevents reseting animated image while loading.
-		img.src = tab.url == "about:newtab"   ? "" :
-	              tab.status != "complete"    ? "icons/loading.png" :
-	              tab.favIconUrl == undefined ? "" :
-	                                            tab.favIconUrl;
-	}
+	elem.querySelector( ".title" ).innerText = tab.title;
 	elem.classList.toggle( "active" , tab.active );
 	elem.style.display = ( data.hide ) ? "none" : "";
-	elem.querySelector( ".triangle" ).className = ( !data.hasChildren  ) ? "triangle" :
-	                                              (  data.hideChildren ) ? "triangle right" : "triangle down";
+	elem.querySelector( ".triangle" ).classList.toggle( "right" , data.hasChildren && data.hideChildren );
+	elem.querySelector( ".triangle" ).classList.toggle( "down" , data.hasChildren && !data.hideChildren );
 	elem.ondblclick = ( data.hasChildren ) ? dblclick : undefined;
 	elem.querySelector( ".childCount" ).innerText = ( data.hasChildren && data.hideChildren ) ? "(" + data.childCount + ")" : "";
 	elem.setAttribute( "data-pinned" , tab.pinned );
-	document.getElementById( data.id ).scrollIntoView( { "block" : "nearest" } );
+	moveTab( elem , tab.index );
 }
-
+function makeElem( index , tab , data ) {
+	const elem = document.importNode( document.getElementById( "tabTemplate" ) , true ).content.firstChild;
+	elem.ondragstart = e => e.dataTransfer.setData( "tabId" , e.target.id );
+	elem.ondragenter = e => e.target.closest( ".tabContent" ).prepend( document.querySelector( "#drag" ) );
+	elem.ondragleave = e => document.querySelector( "#drag" ).style.display = "none";
+	elem.ondragend = e => document.querySelector( "#drag" ).style.display = "none";
+	elem.onmousedown = clicked;
+	elem.oncontextmenu = contextMenu;
+	elem.id = tab.id;
+	const tabs = document.querySelectorAll( ".tab" );
+	elem.setAttribute( "data-pinned" , tab.pinned );
+	moveTab( elem , index );
+	elem.scrollIntoView( { "block" : "nearest" } );
+	update( tab , data );
+}
 function messageHandler( message , sender ) {
 	if ( message.startup ) {
-		browser.windows.getCurrent().then( wind => {
+		browser.windows.getCurrent().then( win => {
 			PORT.postMessage( { "startup" : {} , "windowId" : WINDOW_ID } )
 		} );
 	}
@@ -155,27 +145,24 @@ function messageHandler( message , sender ) {
 	if ( message.active ) {
 		if ( document.getElementById( message.active.id ) ) {
 			document.getElementById( message.active.id ).classList.add( "active" );
+			document.getElementById( message.active.id ).scrollIntoView( { "block" : "nearest" } );
 		}
 		if ( message.active.prevId != undefined ) {
 			document.getElementById( message.active.prevId ).classList.remove( "active" );
 		}
 	}
 	if ( message.move ) {
-		let fromElem = TABS_ELEM.children[message.move.from];
-		let toIndex = message.move.to + ( message.move.to > message.move.from ? 1 : 0 );
-		let toElem = TABS_ELEM.children[toIndex];
-		TABS_ELEM.insertBefore( fromElem , toElem );
+		const elem = document.querySelectorAll( ".tab" )[message.move.from];
+		const index = message.move.to + ( message.move.to > message.move.from ? 1 : 0 );
+		const tabs = document.querySelectorAll( ".tab" );
+		moveTab( elem , index );
 	}
 }
 
-const TABS_ELEM = document.getElementById( "tabList" );
-TABS_ELEM.ondrop = drop;
-TABS_ELEM.ondragover = dragover;
-TABS_ELEM.onclick = e => MENU.style.display = "none";
-const HOVER = document.getElementById( "drag" );
-const MENU = document.getElementById( "menu" );
-MENU.onclick = contextMenuOnClick;
-document.getElementById( "newTab" ).onclick = newTab;
+document.querySelector( "#tabList" ).addEventListener( "drop" , drop );
+document.querySelector( "#tabList" ).addEventListener( "dragover" , dragover );
+document.querySelector( "#menu" ).addEventListener( "click" , contextMenuOnClick );
+document.querySelector( "#menu" ).addEventListener( "blur" , e => e.target.style.display = "none" );
 let PORT;
 let WINDOW_ID;
 browser.windows.getCurrent().then( w => {

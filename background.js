@@ -6,18 +6,18 @@ function findLast( arr , func ) {
 	}
 	return -1;
 }
-
-
+function getWin( windowId ) {
+	if ( WINDOWS[windowId] == undefined ) { // makes data structure when a new window is created.
+		WINDOWS[windowId] = { "port" : undefined , "tabsInfo" : [] };
+	}
+	return WINDOWS[windowId];
+}
 function getIndex( id , win ) {
 	return win.tabsInfo.findIndex( v => v.id == id );
 }
-function getParent( index , win , i = index ) {
-	let parentNotFound = i > 0 && win.tabsInfo[i - 1].indent >= win.tabsInfo[index].indent;
-	return parentNotFound ? getParent( index , win , i - 1 ) : i - 1;
+function getParent( index , win ) {
+	return findLast( win.tabsInfo , v => v.indent < win.tabsInfo[index].indent );
 }
-// function hasChildren( index , win.tabsInfo ) {
-// 	return win.tabsInfo[index + 1] != undefined && win.tabsInfo[index + 1].indent > win.tabsInfo[index].indent;
-// }
 function getAncestors( index , win , r = [] ) {
 	let parent = getParent( index , win );
 	return ( parent > -1 ) ? getAncestors( parent , win , r.concat( parent ) ) : r;
@@ -32,28 +32,38 @@ function getChildren( parent , win ) { // only direct children. Not all descenda
 	return map.filter( v => v != -1 );
 }
 
-
-
 function sendMessage( message , win ) {
-	if ( win.port ) win.port.postMessage( message );
+	win.port?.postMessage( message );
 }
-// function sendUpdate( tab , data , win ) {
-// 	sendMessage( { "update" : { "tab" : tab , "data" : data } } , win );
-// }
 function update( index , win ) {
 	let data = win.tabsInfo[index];
-	// browser.tabs.get( data.id ).then( tab => sendUpdate( tab , data , win ) );
 	browser.tabs.get( data.id ).then( tab => {
 		sendMessage( { "update" : { "tab" : tab , "data" : data } } , win );
 	} );
 }
 function updateParents( win ) {
 	win.tabsInfo.forEach( ( v , i , arr ) => {
-		let hasChildren = arr[i + 1] != undefined && arr[i + 1].indent > v.indent;
+		const hasChildren = i + 1 < arr.length && arr[i + 1].indent > v.indent;
 		if ( v.hasChildren != hasChildren ) {
 			v.hasChildren = hasChildren;
 			update( i , win );
 		}
+	} );
+}
+function setSuccessors( win ) {
+	win.tabsInfo.forEach( ( v , i , arr ) => {
+		const successor = ( arr[i + 1] && v.indent > arr[i + 1].indent ) ? arr[i - 1].id : -1;
+		if ( v.successor != successor ) {
+			v.successor = successor;
+			browser.tabs.update( v.id , { "successorTabId" : successor } );
+		}
+	} );
+}
+function save() {
+	Object.values( WINDOWS ).forEach( win => {
+		win.tabsInfo.forEach( info => {
+			browser.sessions.setTabValue( info.id , "data" , info );
+		} );
 	} );
 }
 function hideChildrenRecursive( index , lastDescendant , hide , win ) {
@@ -82,15 +92,6 @@ function freeChildren( index , win ) { // assumes tabsInfo[index] is being remov
 		sendMessage( { "indent" : { "id" : win.tabsInfo[i].id , "indent" : win.tabsInfo[i].indent } } , win );
 	}
 }
-function setSuccessors( win ) {
-	win.tabsInfo.forEach( ( v , i , arr ) => {
-		let successor = ( arr[i + 1] && v.indent > arr[i + 1].indent ) ? arr[i - 1].id : -1;
-		if ( v.successor != successor ) {
-			v.successor = successor;
-			browser.tabs.update( v.id , { "successorTabId" : successor } );
-		}
-	} );
-}
 function saveClosedTabData( index , tabId , win ) {
 	let ancestors = getAncestors( index , win );
 	let siblings = getChildren( getParent( index , win ) , win );
@@ -100,7 +101,7 @@ function saveClosedTabData( index , tabId , win ) {
 		"ancestorIds" : ancestors.map( v => win.tabsInfo[v].id ) ,
 		"siblingIds" : siblings.filter( v => v != index ).map( v => win.tabsInfo[v].id ) ,
 		"childIds" : children.map( v => win.tabsInfo[v].id ) ,
-		"childIndex" : childIndex ,
+		"childIndex" : childIndex , // childIndex is neer referenced outside this function, so I don't think it needs to be part of closedTabs[]. It does define newt/prevSiblingId though.
 		"prevSiblingId" : ( childIndex > 0 ) ? win.tabsInfo[siblings[childIndex - 1]].id : undefined ,
 		"nextSiblingId" : ( childIndex < siblings.length - 1 ) ? win.tabsInfo[siblings[childIndex + 1]].id : undefined
 	};
@@ -114,76 +115,71 @@ function updateIndents( slice , toIndent , type , win ) {
 		sendMessage( { "indent" : { "id" : v.id , "indent" : v.indent } } , win );
 	} );
 }
-function make( id , win , tab , startup = false ) {
+function make( win , tab , data , oldId , startup = false ) {
 	browser.sessions.setTabValue( tab.id , "oldId" , tab.id );
-	// let data = closedTabs[id];
-	let data = ( startup ) ? undefined : closedTabs[id];
-	let nextSibling = ( data ) ? getIndex( data.nextSiblingId , win ) : -1;
-	let prevSibling = ( data ) ? getIndex( data.prevSiblingId , win ) : -1;
-	let parent = ( startup              ) ? -1 :
-	             ( tab.openerTabId >= 0 ) ? getIndex( tab.openerTabId , win ) :
-	             ( data != undefined    ) ? findLast( win.tabsInfo , v => data.ancestorIds.includes( v.id ) ) :
-	                                        -1;
-	let index = ( startup              ) ? startup.index :
-	            ( tab.openerTabId >= 0 ) ? parent + 1 :
-	            ( nextSibling     >= 0 ) ? nextSibling:
-	            ( prevSibling     >= 0 ) ? getLastDescendant( prevSibling , win ) + 1 :
-	            ( parent          >= 0 ) ? parent + 1 :
-	                                       win.tabsInfo.length;
-	let indent = ( startup              ) ? startup.indent :
-	             ( tab.openerTabId >= 0 ) ? win.tabsInfo[parent].indent + 1 :
-	             ( nextSibling     >= 0 ) ? win.tabsInfo[nextSibling].indent :
-	             ( prevSibling     >= 0 ) ? win.tabsInfo[prevSibling].indent :
-	             ( parent          >= 0 ) ? win.tabsInfo[parent].indent + 1 :
-	                                        0;
-	let ids = [tab.id];
-	if ( data ) {
-		data.childIds.forEach( v => {
-			let index = getIndex( v , win );
-			let lastDescendant = getLastDescendant( index , win );
-			let slice = win.tabsInfo.slice( index , lastDescendant + 1 );
-			updateIndents( slice , indent , 1 , win );
-			slice.forEach( w => ids.push( w.id ) );
+	const restoredTab = oldId ? closedTabs[oldId] : undefined;
+	const nextSibling = ( restoredTab ) ? getIndex( restoredTab.nextSiblingId , win ) : -1;
+	const prevSibling = ( restoredTab ) ? getIndex( restoredTab.prevSiblingId , win ) : -1;
+	const parent = ( tab.openerTabId >= 0 ) ? getIndex( tab.openerTabId , win ) :
+	               ( restoredTab          ) ? findLast( win.tabsInfo , v => restoredTab.ancestorIds.includes( v.id ) ) :
+	                                          -1;
+	const index = ( data                 ) ? data.index :
+	              ( tab.openerTabId >= 0 ) ? parent + 1 :
+	              ( nextSibling     >= 0 ) ? nextSibling :
+	              ( prevSibling     >= 0 ) ? getLastDescendant( prevSibling , win ) + 1 :
+	              ( parent          >= 0 ) ? parent + 1 :
+	                                         win.tabsInfo.length;
+	const indent = ( data                 ) ? data.indent :
+	               ( tab.openerTabId >= 0 ) ? win.tabsInfo[parent].indent + 1 :
+	               ( nextSibling     >= 0 ) ? win.tabsInfo[nextSibling].indent : // This sibling stuff is neccessary!!!
+	               ( prevSibling     >= 0 ) ? win.tabsInfo[prevSibling].indent :
+	               ( parent          >= 0 ) ? win.tabsInfo[parent].indent + 1 :
+	                                          0;
+	let ids = [tab.id]; // tabIds to move after creation, restoring a closed tab may result it moving more than one tab.
+	if ( restoredTab ) {
+		restoredTab.childIds.forEach( v => {
+			const childIndex = getIndex( v , win );
+			if ( childIndex >= 0 ) {
+				const lastDescendant = getLastDescendant( childIndex , win );
+				const slice = win.tabsInfo.slice( childIndex , lastDescendant + 1 );
+				updateIndents( slice , indent , 1 , win );
+				slice.forEach( w => ids.push( w.id ) );
+			}
 		} );
 	}
 	let tabInfo = {
 		"id" : tab.id ,
 		"indent" : indent ,
-		"hide" : ( startup ) ? startup.hide : false ,
-		"hasChildren" : ( startup ) ? startup.hasChildren : false ,
-		"hideChildren" : ( startup ) ? startup.hideChildren : false ,
-		"childCount" : ( startup ) ? startup.childCount : 0 ,
+		"hide" : ( data ) ? data.hide : false ,
+		"hasChildren" : ( data ) ? data.hasChildren : false ,
+		"hideChildren" : ( data ) ? data.hideChildren : false ,
+		"childCount" : ( data ) ? data.childCount : 0 ,
 		"successor" : -1
 	};
-	let tabIndex = Math.min( tab.index , win.tabsInfo.length ); // used for bug when tab.index is higher than window.tabs.length.
-	win.tabsInfo.splice( tabIndex , 0 , tabInfo );
-	// win.tabsInfo.splice( tab.index , 0 , tabInfo );
-	sendMessage( { "create" : { "tab" : tab , "data" : tabInfo , "index" : tabIndex } } , win );
-	// sendMessage( { "create" : { "tab" : tab , "data" : tabInfo , "index" : tab.index } } , win );
+	win.tabsInfo.splice( tab.index , 0 , tabInfo );
+	sendMessage( { "create" : { "tab" : tab , "data" : tabInfo , "index" : tab.index } } , win );
 
 	browser.tabs.move( ids , { "index" : index } ).then( v => {
 		if ( parent >= 0 ) {
 			hideChildren( parent , false , win );
-		}
-		if ( ids.length >= 2 ) {
-			hideChildren( getIndex( tab.id , win ) , false , win );
 		}
 		if ( !startup ) {
 			updateParents( win );
 			setSuccessors( win );
 			save();
 		}
-		delete closedTabs[id];
+		if ( restoredTab ) {
+			delete closedTabs[oldId];
+		}
 	} );
 }
 
-
-
 function onActivated( activeInfo ) {
-	let win = WINDOWS[activeInfo.windowId];
-	let ancestors = getAncestors( getIndex( activeInfo.tabId , win ) , win );
+	const win = WINDOWS[activeInfo.windowId];
+	const index = getIndex( activeInfo.tabId , win )
+	const ancestors = index >= 0 ? getAncestors( index , win ) : [];
 	sendMessage( { "active" : { "id" : activeInfo.tabId , "prevId" : activeInfo.previousTabId } } , win );
-	ancestors.forEach( index => { // makes descendants are showing children and therefore active tab is visible.
+	ancestors.forEach( index => { // makes all ancestors show children, therefore active tab is visible.
 		hideChildren( index , false , win );
 	})
 }
@@ -200,9 +196,6 @@ function onMoved( tabId , moveInfo ) {
 	let from = win.tabsInfo.splice( fromIndex , 1 )[0];
 	win.tabsInfo.splice( moveInfo.toIndex , 0 , from );
 	sendMessage( { "move" : { "to" : moveInfo.toIndex , "from" : fromIndex } } , win );
-	updateParents( win );
-	setSuccessors( win );
-	save();
 }
 function onRemoved( tabId , removeInfo ) {
 	let win = WINDOWS[removeInfo.windowId];
@@ -217,13 +210,14 @@ function onRemoved( tabId , removeInfo ) {
 }
 function onCreated( tab ) {
 	let win = getWin( tab.windowId );
-	browser.sessions.getTabValue( tab.id , "oldId" ).then( id => make( id , win , tab ) );
+	browser.sessions.getTabValue( tab.id , "oldId" ).then( oldId => make( win , tab , false , oldId ) );
 }
 function onAttached( tabId , attachInfo ) {
+	const win = WINDOWS[attachInfo.newWindowId];
 	browser.tabs.get( tabId ).then( tab => {
 		let data = detachedTabsInfo.shift();
 		data.index = attachInfo.newPosition;
-		make( tabId , WINDOWS[attachInfo.newWindowId] , tab , data );
+		make( win , tab , data , undefined );
 	} );
 }
 function onDetached( tabId , detachInfo ) {
@@ -249,34 +243,31 @@ function messageHandler( message , sender ) {
 	}
 	if ( message.move ) { // when the user drags a tab in the sideBar ui.
 		browser.tabs.get( message.move.from ).then( from => {
-			let winFrom = WINDOWS[from.windowId];
-			let oldIndex = getIndex( message.move.from , winFrom );
-			let oldLastDescendant = getLastDescendant( oldIndex , winFrom );
+			const winFrom = WINDOWS[from.windowId];
+			const moveFrom = getIndex( message.move.from , winFrom );
 			let moveTo = getIndex( message.move.to , win );
-			if ( from.windowId == message.windowId && message.move.type != 3 && moveTo >= oldIndex && moveTo <= oldLastDescendant ) {
+			const oldLastDescendant = getLastDescendant( moveFrom , winFrom );
+			if ( from.windowId == message.windowId && message.move.type != 3 && moveTo >= moveFrom && moveTo <= oldLastDescendant ) {
 				return; // if moving to same location or to child of the tab you're trying to move.
 			}
-			let slice = winFrom.tabsInfo.slice( oldIndex , oldLastDescendant + 1 );
+			let slice = winFrom.tabsInfo.slice( moveFrom , oldLastDescendant + 1 );
 			updateIndents( slice , win.tabsInfo[moveTo].indent , message.move.type , win );
-			if ( moveTo > oldIndex && from.windowId == message.windowId ) moveTo--;
-			if ( message.move.type > 0 ) moveTo++;
-			let moveTabs = slice.map( v => v.id );
-			if ( from.windowId == message.windowId ) { // moving from/to the same window
-				browser.tabs.move( moveTabs , { "index" : moveTo } ).then( v => {
-					if ( moveTo == oldIndex ) { // only do when onMoved isn't called, because onMoved does all this.
-						updateParents( win );
-						setSuccessors( win );
-						save();
-					}
-				} );
+			if ( moveTo > moveFrom && from.windowId == message.windowId ) {
+				moveTo--;
 			}
-			else { // moving from/to different windows
+			if ( message.move.type > 0 ) {
+				moveTo++;
+			}
+			if ( from.windowId != message.windowId ) { // moving from/to a different window
 				detachedTabsInfo = JSON.parse( JSON.stringify( slice ) );
-				for ( let i = 0; i < moveTabs.length; i++ ) {
-					browser.tabs.move( moveTabs[i] , { "windowId" : message.windowId , "index" : moveTo + i } );
-				}
-				browser.tabs.update( moveTabs[0] , { "active" : true } );
 			}
+			const moveTabs = slice.map( v => v.id );
+			browser.tabs.move( moveTabs , { "windowId" : message.windowId , "index" : moveTo } ).then( v => {;
+				browser.tabs.update( moveTabs[0] , { "active" : true } );
+				updateParents( win );
+				setSuccessors( win );
+				save();
+			} );
 		} );
 	}
 	if ( message.pin ) {
@@ -286,21 +277,6 @@ function messageHandler( message , sender ) {
 	}
 }
 
-
-
-function save() {
-	Object.keys( WINDOWS ).forEach( key => {
-		WINDOWS[key].tabsInfo.forEach( info => {
-			browser.sessions.setTabValue( info.id , "data" , info );
-		} );
-	} );
-}
-function getWin( windowId ) {
-	if ( WINDOWS[windowId] == undefined ) { // makes data structure when a new window is created.
-		WINDOWS[windowId] = { "port" : undefined , "tabsInfo" : [] };
-	}
-	return WINDOWS[windowId];
-}
 function connected( port ) {
 	port.onMessage.addListener( messageHandler );
 	port.postMessage( { "startup" : 1 } );
@@ -313,7 +289,7 @@ function startup() {
 				browser.sessions.getTabValue( tab.id , "data" ).then( d => {
 					data = ( d ) ? d : { "indent" : 0 , "hide" : false , "hasChildren" : false , "hideChildren" : false , "childCount" : 0 };
 					data.index = win.tabsInfo.length;
-					make( undefined , win , tab , data );
+					make( win , tab , data , undefined , true );
 				} );
 			} );
 		} );
@@ -321,8 +297,6 @@ function startup() {
 }
 
 
-let startupCompleted = false;
-let startupPorts = []; // list of ports awaiting startup()'s completion. Only used once after startup.
 let WINDOWS = {}; // = { "id" : { "port" : port , "tabsInfo" : TAB_LIST } , "id" : { ... } , ... }
 let closedTabs = {};
 let detachedTabsInfo = []; // temporary storage because sessions api doesn't retain data for tabs moved to other windows.
@@ -342,44 +316,43 @@ startup();
 
 
 
-
-//=========== fixed but not uploaded to mdn ============
-
-//=============== fixed but uncommited =================
-
-// onAttach needs to activate tab.
-
 //================== needed changes ====================
+
+// give pinned tabs position fixed so that it's always on screen.
+	// will probably have to set all tabs to position absolute for this.
+
 
 
 //======================= bugs =========================
 
+// sometimes the successor tab is parent rather than sibling.
+	// this happens because the successor is the previous active tab sometimes (which is desirable if for example I google something then close the google page)
+	// solution is to set successors differently if I go from parent to descendant.
+	// UPDATE. This may be fixed right now, I can't reproduce it.
+
 // can still append tabs past newTab elem sometimes.
 	// not sure how to reproduce, but it defs happened.
-
-//================== ideal changes =====================
-
-// close tree/children context menu options.
+	// happens when restoring a closed tab that isn't the most recently closed.
+	// UPDATE. This may be fixed right now, but I don't know how to test it.
 
 //================= possible changes ===================
 
-// maybe 18 high tabs instead of 16.
+
+// add a hotkey to open the sidebar.
+
+// show tab title on hover
+	// maybe also decendant tabs as well.
+
+// close tree/children context menu options.
+
+// investigate browser.menus.overrideContext for sidebar's context menu
+
+// maybe 17 or 18 high tabs instead of 16.
 
 // undo close tab:
-	// maybe only return children into place if they're still a descendant of parent.
+	// maybe only return children into place if they're still a descendant of restored parent.
+		// this might just make to sense to do. at all.
 
-// do things with options.
-
-// can take elems children by inserting as next sibling when elem has children.
-	// not sure if this is a bug or a feature.
-
-// maybe set successor of a new non-child tab to be the previously acitve tab, only until active tab changes.
-	// probably a bad call.
-
-// do somthing about behaviour after last tab closed and undo last tab is done.
-	// I'm thinking I'll wait to see if it gets fixed.
-		// I'm not sure what the problem was, but I can't reproduce it.
-	// I could just restart the addon after this happens, or reset the window's tabsInfo.
 
 //====================== notes =========================
 
@@ -408,124 +381,3 @@ startup();
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	// if ( message.move ) { // when the user drags a tab in the sideBar ui.
-	// 	let oldIndex = getIndex( message.move.from , tabsInfo );
-	// 	let oldLastDescendant = getLastDescendant( oldIndex , tabsInfo );
-	// 	let moveTo = getIndex( message.move.to , tabsInfo );
-	// 	if ( message.move.type != 3 && moveTo >= oldIndex && moveTo <= oldLastDescendant ) return; // if moving to same location or to child.
-
-	// 	let slice = tabsInfo.slice( oldIndex , oldLastDescendant + 1 );
-	// 	updateIndents( slice , tabsInfo[moveTo].indent , message.move.type , win );
-	// 	if ( moveTo > oldIndex ) moveTo--;
-	// 	if ( message.move.type > 0 ) moveTo++;
-	// 	let moveTabs = slice.map( v => v.id );
-	// 	browser.tabs.move( moveTabs , { "index" : moveTo } );
-	// }
-
-
-
-
-
-
-
-
-
-// function save() {
-// 	if ( startupCompleted ) {
-// 				browser.tabs.query( {} ).then( tabs => {
-// 					tabs.forEach( tab => {
-// 						browser.sessions.setTabValue( tab.id , "data" , WINDOWS[tab.windowId].tabsInfo[tab.index] );
-// 					} );
-// 				} );
-// 		// let windowsTabsInfo = Object.keys( WINDOWS ).map( key => WINDOWS[key].tabsInfo );
-// 		// browser.storage.local.set( { "data" : JSON.stringify( windowsTabsInfo ) } );
-// 	}
-// }
-
-
-// function connected( port ) {
-// 	port.onMessage.addListener( messageHandler );
-// 	if ( startupCompleted ) {
-// 		port.postMessage( { "startup" : 1 } );
-// 	}
-// 	else {
-// 		startupPorts.push( port );
-// 	}
-// }
-
-
-// function startup() {
-// 	browser.storage.local.get( "data" ).then( savedData => {
-// 		browser.windows.getAll( { "populate" : true } ).then( windows => {
-// 			if ( savedData.data ) {
-// 				savedData.data = JSON.parse( savedData.data );
-// 				// console.log( "savedData.data exist" );
-// 			}
-// 			// else {
-// 			// 	console.log( "savedData.data DOES NOT exist" );
-// 			// }
-// 			windows.forEach( ( w , i ) => {
-// 				// if ( WINDOWS[w.id] == undefined ) { // makes data structure when a new window is created.
-// 				// 	WINDOWS[w.id] = { "port" : undefined , "tabsInfo" : [] };
-// 				// }
-// 				// let win = WINDOWS[w.id];
-// 				let win = getWin( w.id );
-// 				w.tabs.forEach( ( tab , j ) => {
-// 					let startup = {
-// 						"indent" : 0 ,
-// 						"hide" : false ,
-// 						"hasChildren" : false ,
-// 						"hideChildren" : false
-// 					};
-// 					if ( savedData.data && savedData.data[i] && savedData.data[i][j] ) {
-// 								for ( let key in startup ) {
-// 									startup[key] = savedData.data[i][j][key];
-// 								}
-// 					}
-// 					make( undefined , win , tab , startup );
-// 						// assume savedData[i] relates to windows[i]
-// 						// update savedData's id
-// 						// update all tabs' indent, hideChildren and hide attributes.
-
-// 				} );
-// 			} );
-// 			startupCompleted = true;
-// 			startupPorts.forEach( port => port.postMessage( { "startup" : 1 } ) );
-
-// 		} );
-// 	} );
-// }
-
-
-// async version of current startup().
-		// let dongs = 0;
-		// for ( let i = 0; i < windows.length; i++ ) {
-		// 	let win = getWin( windows[i].id );
-		// 	for ( let j = 0; j < windows[i].tabs.length; j++ ) {
-		// 		await browser.sessions.getTabValue( windows[i].tabs[j].id , "data" ).then( v => {
-		// 			startup = ( v ) ? v : { "indent" : 0 , "hide" : false , "hasChildren" : false , "hideChildren" : false };
-		// 			make( undefined , win , windows[i].tabs[j] , startup );
-		// 			dongs += 1;
-		// 		} );
-		// 	}
-		// }
-		// console.log( dongs );

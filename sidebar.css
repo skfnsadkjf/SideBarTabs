@@ -3,15 +3,28 @@
 }
 #tabList {
 	height: 100vh;
-	background-color: #888888;
+	width: 100vw;
+	background-color: #808080;
 	border-left: 1px solid black;
+	display: grid;
+	grid-template-rows: auto 1fr;
+	overflow-y: hidden;
+}
+#tabList>* {
+	width: calc( 100vw - 1px ); /* this 1px is needed to prevent ff from making shit 1 px wider than it should be and adding a horizontal scrollbar.*/
+}
+#notPinnedTabs {
+	padding-bottom: calc( 66vh );
+	overflow-y: scroll;
+	scrollbar-width: thin;
+	scrollbar-color: #333333 #888888;
 }
 .tabContent { background-color: #e0e0e0; }
 .tabContent>*{ display: inline-block; }
-.tab:hover .tabContent{ background-color: #d0d0d0; }
-.tab:hover .childCount{ background-color: #d0d0d0; }
-.tab.active .tabContent{ background-color: #a0a0d0; }
-.tab.active .childCount{ background-color: #a0a0d0; }
+.tab:hover .tabContent { background-color: #d0d0d0; }
+.tab:hover .childCount { background-color: #d0d0d0; }
+.tab.active .tabContent { background-color: #a0a0d0; }
+.tab.active .childCount { background-color: #a0a0d0; }
 .tab {
 	overflow: hidden;
 	white-space: nowrap;
@@ -21,22 +34,11 @@
 	table-layout: fixed;
 	border-collapse: collapse;
 }
+
 .favicon { width: 22px; }
 .favicon>img {
 	height: 16px;
 	vertical-align: bottom;
-}
-
-#newTab:hover { background-color: #d0d0d0; }
-#newTab {
-	/*display: none;*/
-	height: 16px; width: 100%;
-	background-color: #e0e0e0;
-}
-#newTab img {
-	margin-left: auto;
-	margin-right: auto;
-	display: block;
 }
 
 .expand { width: 13px; }
@@ -64,15 +66,13 @@
 	background-color: #e0e0e0;
 	padding: 0px 3px 0px 5px;
 }
+.tab:hover .childCount { content: url(icons/close.png); }
+.tab:hover .childCount:hover { content: url(icons/closeHover.png); }
 
 #drag { position: absolute; top: 0px; width: 100%; height: 16px; }
 .drag0 { border-top: 4px solid black; }
 .drag1 { border: 2px solid black; }
 .drag2 { border-bottom: 4px solid black; }
-
-.tab:hover .childCount { content: url(icons/close.png); }
-.tab:hover .childCount:hover { content: url(icons/closeHover.png); }
-
 
 
 #menu {
